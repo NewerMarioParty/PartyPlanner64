@@ -10,6 +10,7 @@ import lineImage from "./img/toolbar/line.png";
 import stickylineImage from "./img/toolbar/stickyline.png";
 import rotateImage from "./img/toolbar/rotate.png";
 import eraserImage from "./img/toolbar/eraser.png";
+import telescopeImage from "./img/toolbar/telescope.png";
 import blueImage from "./img/toolbar/blue.png";
 import blue3Image from "./img/toolbar/blue3.png";
 import redImage from "./img/toolbar/red.png";
@@ -81,6 +82,7 @@ const mp1_actions: ToolbarItem[] = [
   { "name": "Connect spaces", "icon": lineImage, "type": Action.LINE },
   { "name": "Connect multiple spaces in one click", "icon": stickylineImage, "type": Action.LINE_STICKY },
   { "name": "Erase spaces and lines", "icon": eraserImage, "type": Action.ERASE },
+  { "name": "Telescope tool: move your cursor over the map to visualize how it will look during gameplay", "icon": telescopeImage, "type": Action.TELESCOPE },
   { "spacer": true},
   { "name": "Add blue space", "icon": blueImage, "type": Action.ADD_BLUE, draggable: true },
   { "name": "Add red space", "icon": redImage, "type": Action.ADD_RED, draggable: true },
@@ -111,6 +113,7 @@ const mp2_actions: ToolbarItem[] = [
   { "name": "Connect spaces", "icon": lineImage, "type": Action.LINE },
   { "name": "Connect multiple spaces in one click", "icon": stickylineImage, "type": Action.LINE_STICKY },
   { "name": "Erase spaces and lines", "icon": eraserImage, "type": Action.ERASE },
+  { "name": "Telescope tool: move your cursor over the map to visualize how it will look during gameplay", "icon": telescopeImage, "type": Action.TELESCOPE },
   { "spacer": true},
   { "name": "Add blue space", "icon": blueImage, "type": Action.ADD_BLUE, draggable: true },
   { "name": "Add red space", "icon": redImage, "type": Action.ADD_RED, draggable: true },
@@ -139,7 +142,8 @@ const mp3_actions: ToolbarItem[] = [
   { "name": "Connect spaces", "icon": lineImage, "type": Action.LINE },
   { "name": "Connect multiple spaces in one click", "icon": stickylineImage, "type": Action.LINE_STICKY },
   { "name": "Erase spaces and lines", "icon": eraserImage, "type": Action.ERASE },
-  { "name": "Rotate arrow spaces", "icon": rotateImage, "type": Action.ROTATE, advanced: true },
+  { "name": "Rotate arrow spaces", "icon": rotateImage, "type": Action.ROTATE },
+  { "name": "Telescope tool: move your cursor over the map to visualize how it will look during gameplay", "icon": telescopeImage, "type": Action.TELESCOPE },
   { "spacer": true},
   { "name": "Add blue space", "icon": blue3Image, "type": Action.ADD_BLUE, draggable: true },
   { "name": "Add red space", "icon": red3Image, "type": Action.ADD_RED, draggable: true },
@@ -169,6 +173,7 @@ const mp3_duel_actions: ToolbarItem[] = [
   { "name": "Connect spaces", "icon": lineImage, "type": Action.LINE },
   { "name": "Connect multiple spaces in one click", "icon": stickylineImage, "type": Action.LINE_STICKY },
   { "name": "Erase spaces and lines", "icon": eraserImage, "type": Action.ERASE },
+  { "name": "Telescope tool: move your cursor over the map to visualize how it will look during gameplay", "icon": telescopeImage, "type": Action.TELESCOPE },
   { "spacer": true},
   { "name": "Add basic space", "icon": basic3Image, "type": Action.ADD_DUEL_BASIC, draggable: true },
   { "name": "Add Mini-Game space", "icon": minigameduel3Image, "type": Action.ADD_MINIGAME, draggable: true },

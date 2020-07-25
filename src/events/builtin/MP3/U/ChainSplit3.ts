@@ -1,7 +1,7 @@
 import { IEvent, IEventParseInfo, IEventWriteInfo } from "../../../events";
-import { EventActivationType, EventExecutionType, Game, EventParameterType } from "../../../../types";
+import { EditorEventActivationType, EventExecutionType, Game, EventParameterType } from "../../../../types";
 import { hashEqual } from "../../../../utils/arrays";
-import { addConnection, ISpaceEvent } from "../../../../boards";
+import { addConnection, IEventInstance } from "../../../../boards";
 import { addEventToLibrary } from "../../../EventLibrary";
 
 // Represents the "event" where the player decides between two paths.
@@ -9,7 +9,7 @@ import { addEventToLibrary } from "../../../EventLibrary";
 export const ChainSplit3: IEvent = {
   id: "CHAINSPLIT3",
   name: "",
-  activationType: EventActivationType.WALKOVER,
+  activationType: EditorEventActivationType.WALKOVER,
   executionType: EventExecutionType.PROCESS,
   parameters: [
     { name: "spaceIndexArgs", type: EventParameterType.NumberArray, },
@@ -55,7 +55,7 @@ export const ChainSplit3: IEvent = {
 
     return false;
   },
-  write(dataView: DataView, event: ISpaceEvent, info: IEventWriteInfo, temp: any) {
+  write(dataView: DataView, event: IEventInstance, info: IEventWriteInfo, temp: any) {
     const spaceIndexArgs = event.parameterValues!["spaceIndexArgs"] as number[];
     const chainArgs = event.parameterValues!["chainArgs"] as number[];
     const altChain = event.parameterValues!.altChain as number[] || [];

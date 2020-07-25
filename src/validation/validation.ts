@@ -11,6 +11,7 @@ import { get, $setting } from "../views/settings";
 import { getRule, IValidationRule } from "./validationrules";
 import { getBoardInfos } from "../adapter/boardinfo";
 import { IBoardInfo } from "../adapter/boardinfobase";
+import { isPromiseLike } from "../utils/promise";
 
 function _overwriteAvailable(boardInfo: IBoardInfo) {
   if (boardInfo.canOverwrite)
@@ -85,7 +86,7 @@ export interface IValidationResult {
   warnings: string[];
 }
 
-export function validateCurrentBoardForOverwrite(): IValidationResult[] | null {
+export async function validateCurrentBoardForOverwrite(): Promise<IValidationResult[] | null> {
   let gameID = romhandler.getROMGame()!;
   if (!gameID)
     return null;
@@ -99,15 +100,18 @@ export function validateCurrentBoardForOverwrite(): IValidationResult[] | null {
   let gameLevelErrors: string[] = [];
   let gameLevelWarnings: string[] = [];
   if (!skipValidation) {
-    _getRulesForGame(gameID).forEach(rule => {
-      const failureResult = rule.fails(currentBoard);
+    for (const rule of _getRulesForGame(gameID)) {
+      let failureResult = rule.fails(currentBoard);
+      if (isPromiseLike(failureResult)) {
+        failureResult = await failureResult;
+      }
       if (failureResult) {
         if (rule.level === ValidationLevel.ERROR)
           gameLevelErrors.push(failureResult);
         else if (rule.level === ValidationLevel.WARNING)
           gameLevelWarnings.push(failureResult);
       }
-    });
+    }
   }
   results.push({
     errors: gameLevelErrors,
@@ -119,36 +123,42 @@ export function validateCurrentBoardForOverwrite(): IValidationResult[] | null {
   // Evaluate any rules specific to certain ROM board targets.
   // As we switch to common overlays, these cases are dwindling.
   const boardInfos = getBoardInfos(gameID);
-  romBoards.forEach((board, boardIndex) => {
-    if (_dontShowInUI(board, currentBoard.type))
-      return;
+  if (boardInfos) {
+    for (let boardIndex = 0; boardIndex < romBoards.length; boardIndex++) {
+      const board = romBoards[boardIndex];
+      if (_dontShowInUI(board, currentBoard.type))
+        continue;
 
-    const boardInfo = boardInfos[boardIndex];
-    let unavailable = !_overwriteAvailable(boardInfo);
+      const boardInfo = boardInfos[boardIndex];
+      let unavailable = !_overwriteAvailable(boardInfo);
 
-    let boardLevelErrors: string[] = [];
-    let boardLevelWarnings: string[] = [];
-    if (!unavailable && !get($setting.uiSkipValidation)) {
-      let rules = _getRulesForBoard(gameID, boardIndex);
-      rules.forEach(rule => {
-        let failureResult = rule.fails(currentBoard);
-        if (failureResult) {
-          if (rule.level === ValidationLevel.ERROR)
-            boardLevelErrors.push(failureResult);
-          else if (rule.level === ValidationLevel.WARNING)
-            boardLevelWarnings.push(failureResult);
+      let boardLevelErrors: string[] = [];
+      let boardLevelWarnings: string[] = [];
+      if (!unavailable && !get($setting.uiSkipValidation)) {
+        let rules = _getRulesForBoard(gameID, boardIndex);
+        for (const rule of rules) {
+          let failureResult = rule.fails(currentBoard);
+          if (isPromiseLike(failureResult)) {
+            failureResult = await failureResult;
+          }
+          if (failureResult) {
+            if (rule.level === ValidationLevel.ERROR)
+              boardLevelErrors.push(failureResult);
+            else if (rule.level === ValidationLevel.WARNING)
+              boardLevelWarnings.push(failureResult);
+          }
         }
+      }
+
+      results.push({
+        name: board.name,
+        unavailable,
+        forcedDisabled,
+        errors: boardLevelErrors,
+        warnings: boardLevelWarnings,
       });
     }
-
-    results.push({
-      name: board.name,
-      unavailable,
-      forcedDisabled,
-      errors: boardLevelErrors,
-      warnings: boardLevelWarnings,
-    });
-  });
+  }
 
   return results;
 }

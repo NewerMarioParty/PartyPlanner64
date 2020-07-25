@@ -3,12 +3,12 @@ import { getSymbols } from "../symbols/symbols";
 import { getChainIndexValuesFromAbsoluteIndex } from "../adapter/boarddef";
 import { Game, EventParameterType } from "../types";
 import { $$hex } from "../utils/debug";
-import { ISpaceEvent } from "../boards";
+import { IEventInstance } from "../boards";
 
 /**
  * Takes event asm, and makes it assemble (in isolation)
  */
-export function prepAsm(asm: string, event: IEvent, spaceEvent: ISpaceEvent, info: IEventWriteInfo) {
+export function prepAsm(asm: string, event: IEvent, spaceEvent: IEventInstance, info: IEventWriteInfo) {
   const parameterSymbols = makeParameterSymbolLabels(event, spaceEvent, info);
   const asmWithParamSyms = [
     ...parameterSymbols,
@@ -23,23 +23,32 @@ export function prepAsm(asm: string, event: IEvent, spaceEvent: ISpaceEvent, inf
  */
 export function prepGenericAsm(asm: string, addr: number, game: Game) {
   const orgDirective = `.org ${$$hex(addr)}`;
-  const syms = makeGameSymbolLabels(game, true);
+  const addrSyms = makeGenericSymbolsForAddresses(asm);
+  const gameSyms = makeGameSymbolLabels(game, true);
   return [
     orgDirective,
-    ...syms,
+    ...addrSyms,
+    ...gameSyms,
     asm,
     ".align 4", // it better!
   ].join("\n");
 }
 
 export function prepSingleEventAsm(
-  asm: string, event: IEvent, spaceEvent: ISpaceEvent, info: IEventWriteInfo, keepStatic: boolean, eventNum: number): string
+  asm: string, event: IEvent, spaceEvent: IEventInstance, info: IEventWriteInfo, keepStatic: boolean, eventNum: number): string
 {
+  // We either define a label at the top, or an alias to the main: label if present.
+  const hasMainEntry = asm.split("\n").find(value => value.startsWith("main:"));
+  const eventLabel = createEventInstanceLabel(info.curSpaceIndex, eventNum);
+  const topLabel = !hasMainEntry && `${eventLabel}:`;
+  const bottomLabel = hasMainEntry && `.definelabel ${eventLabel},main`;
+
   return scopeLabelsStaticByDefault(`
     .beginfile ; Scopes static labels
-    __PP64_INTERNAL_EVENT_${info.curSpaceIndex}_${eventNum}:
+    ${topLabel || ""}
     ${makeParameterSymbolLabels(event, spaceEvent, info).join("\n")}
     ${asm}
+    ${bottomLabel || ""}
     .align 4
     .endfile
   `, keepStatic);
@@ -53,14 +62,33 @@ export function makeGameSymbolLabels(game: Game, needOverlayStubs: boolean): str
 
   // Add symbols that are aliased from the board overlay.
   switch (game) {
+    case Game.MP1_USA:
+      if (needOverlayStubs) {
+        syms.push(".definelabel GetBoardAudioIndex,0");
+      }
+      else {
+        syms.push(`.definelabel GetBoardAudioIndex,__PP64_INTERNAL_GET_BOARD_AUDIO_INDEX`);
+      }
+      break;
+    case Game.MP2_USA:
+      if (needOverlayStubs) {
+        syms.push(".definelabel ViewBoardMap,0");
+      }
+      else {
+        syms.push(".definelabel ViewBoardMap,0x80103A64");
+      }
+      break;
+
     case Game.MP3_USA:
       if (needOverlayStubs) {
         syms.push(".definelabel GetBasicPromptSelection,0");
         syms.push(".definelabel ViewBoardMap,0");
+        syms.push(".definelabel GetBoardAudioIndex,0");
       }
       else {
         syms.push(".definelabel GetBasicPromptSelection,__PP64_INTERNAL_BASIC_MESSAGE_CHOICE");
         syms.push(".definelabel ViewBoardMap,__PP64_INTERNAL_VIEW_MAP");
+        syms.push(`.definelabel GetBoardAudioIndex,__PP64_INTERNAL_GET_BOARD_AUDIO_INDEX`);
       }
       break;
   }
@@ -68,7 +96,47 @@ export function makeGameSymbolLabels(game: Game, needOverlayStubs: boolean): str
   return syms;
 }
 
-export function makeParameterSymbolLabels(event: IEvent, spaceEvent: ISpaceEvent, info: IEventWriteInfo): string[] {
+const _funcRegex = /func_(8[0-9A-Fa-f]{7})/g;
+const _addrRegex = /D_(8[0-9A-Fa-f]{7})/g;
+
+/**
+ * Creates labels for any "obvious" symbols:
+ *   func_80012345
+ *   D_80012345
+ */
+export function makeGenericSymbolsForAddresses(asm: string): string[] {
+  let results: string[] = [];
+
+  const funcMatches = asm.match(_funcRegex);
+  if (funcMatches) {
+    funcMatches.forEach(match => {
+      if (asm.indexOf(match + ":") >= 0) {
+        // Don't create an alias if there's a label for "func_x" already,
+        // since the generated label is most likely going to corrupt things.
+        return;
+      }
+      const addr = match.substr(5).toUpperCase();
+      results.push(`.definelabel ${match},0x${addr}`);
+    });
+  }
+
+  const addrMatches = asm.match(_addrRegex);
+  if (addrMatches) {
+    addrMatches.forEach(match => {
+      if (asm.indexOf(match + ":") >= 0) {
+        return;
+      }
+      const addr = match.substr(2).toUpperCase();
+      results.push(`.definelabel ${match},0x${addr}`);
+    });
+  }
+
+  // Remove duplicates.
+  results = results.filter((item, index) => results.indexOf(item) === index);
+  return results;
+}
+
+export function makeParameterSymbolLabels(event: IEvent, spaceEvent: IEventInstance, info: IEventWriteInfo): string[] {
   let parameterSymbols: string[] = [];
   const parameters = event.parameters;
   const parameterValues = spaceEvent.parameterValues;
@@ -246,4 +314,9 @@ function replaceStaticRegionDirectives(lines: string[]): string {
   }
 
   return adjustedLines.join("\n");
+}
+
+export function createEventInstanceLabel(spaceIndex: number, eventNumber: number): string {
+  const strIndex = spaceIndex < 0 ? ("minus" + Math.abs(spaceIndex)) : spaceIndex;
+  return `__PP64_INTERNAL_EVENT_${strIndex}_${eventNumber}`;
 }

@@ -1,5 +1,5 @@
 import { IEvent, IEventParseInfo } from "../../../events";
-import { EventActivationType, EventExecutionType, Game } from "../../../../types";
+import { EditorEventActivationType, EventExecutionType, Game } from "../../../../types";
 import { hashEqual } from "../../../../utils/arrays";
 import { addEventToLibrary } from "../../../EventLibrary";
 
@@ -8,7 +8,7 @@ import { addEventToLibrary } from "../../../EventLibrary";
 export const ThwompChainSplit: IEvent = {
   id: "THWOMPCHAINSPLIT",
   name: "Thwomp Chain Split",
-  activationType: EventActivationType.WALKOVER,
+  activationType: EditorEventActivationType.WALKOVER,
   executionType: EventExecutionType.PROCESS, // Unconfirmed
   fakeEvent: true,
   supportedGames: [

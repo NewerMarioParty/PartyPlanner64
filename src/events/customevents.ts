@@ -2,11 +2,13 @@ import { IEvent, IEventWriteInfo, IEventParameter } from "./events";
 import { getSavedEvents } from "../utils/localstorage";
 import { $$log } from "../utils/debug";
 import { copyRange } from "../utils/arrays";
-import { EventActivationType, getGameName, Game, getExecutionTypeByName, EventParameterTypes, EventParameterType } from "../types";
+import { getGameName, Game, getExecutionTypeByName, EventParameterTypes, EventParameterType, EventCodeLanguage, EditorEventActivationType } from "../types";
 import { assemble } from "mips-assembler";
 import { prepAsm } from "./prepAsm";
-import { ISpaceEvent } from "../boards";
+import { IEventInstance } from "../boards";
 import { addEventToLibrary } from "./EventLibrary";
+import { compile } from "../utils/c-compiler";
+import { prepC } from "./prepC";
 
 export interface ICustomEvent extends IEvent {
   asm: string;
@@ -33,6 +35,25 @@ export const CustomAsmHelper = {
       }
     } while (lastFind);
     return matches;
+  },
+
+  clearDiscreteProperties(asm: string, properties: string[]) {
+    properties.forEach(propertyName => {
+      const regex = new RegExp("^\\s*[;\\/]+\\s*" + propertyName + ":.*[\r\n]*", "gim");
+      asm = asm.replace(regex, "");
+    });
+    return asm;
+  },
+
+  writeDiscreteProperty(asm: string, propName: string, value: string, commentChar: string) {
+    return `${commentChar} ${propName}: ${value}\n` + asm;
+  },
+
+  writeDiscretePropertyArray(asm: string, propName: string, values: string[], commentChar: string) {
+    for (let i = values.length - 1; i >= 0; i--) {
+      asm = `${commentChar} ${propName}: ${values[i]}\n` + asm;
+    }
+    return asm;
   },
 
   readSupportedGames: function(asm: string): Game[] | null {
@@ -95,70 +116,86 @@ export const CustomAsmHelper = {
     });
   },
 
-  /** Does a test assembly of a custom event. */
-  testAssemble: function(asm: string, parameters?: IEventParameter[], info: Partial<IEventWriteInfo> = {}) {
-    // Make fake parameterValues
-    const parameterValues: any = {};
-    if (parameters && parameters.length) {
-      parameters.forEach(parameter => {
-        parameterValues[parameter.name] = 0;
-      });
-    }
+  testCustomEvent: async function(lang: EventCodeLanguage, code: string, parameters?: IEventParameter[], info: Partial<IEventWriteInfo> = {}) {
+    switch (lang) {
+      case EventCodeLanguage.MIPS:
+        return CustomAsmHelper.testAssemble(code, parameters, info);
 
-    const customEvent = createCustomEvent(asm);
-    const preppedAsm = prepAsm(asm, customEvent, { parameterValues } as ISpaceEvent, Object.assign({
+      case EventCodeLanguage.C:
+        return CustomAsmHelper.testCompile(code, parameters, info);
+
+      default:
+        throw new Error(`Unrecognized event code language: ${lang}`);
+    }
+  },
+
+  /** Does a test assembly of a custom event. */
+  testAssemble: function(asm: string, parameters?: IEventParameter[], info: Partial<IEventWriteInfo> = {}): ArrayBuffer {
+    const parameterValues = _makeFakeParameterValues(parameters);
+
+    const customEvent = createCustomEvent(EventCodeLanguage.MIPS, asm);
+    const preppedAsm = prepAsm(asm, customEvent, { parameterValues } as IEventInstance, Object.assign({
       addr: 0,
     }, info) as IEventWriteInfo);
     const bytes = assemble(preppedAsm) as ArrayBuffer;
     return bytes;
-  }
+  },
+
+  testCompile: async function(code: string, parameters?: IEventParameter[], info: Partial<IEventWriteInfo> = {}) {
+    const parameterValues = _makeFakeParameterValues(parameters);
+
+    const customEvent = createCustomEvent(EventCodeLanguage.C, code);
+    const preppedC = prepC(code, customEvent, { parameterValues } as IEventInstance, info as IEventWriteInfo);
+
+    const asm = await compile(preppedC);
+    $$log(asm);
+
+    const preppedAsm = prepAsm(asm, customEvent, {} as IEventInstance, Object.assign({
+      addr: 0,
+    }, info) as IEventWriteInfo);
+    assemble(preppedAsm);
+
+    return asm;
+  },
 };
 
-/** Creates a custom event object from string assembly. */
-export function createCustomEvent(asm: string, validate?: boolean) {
-  let eventName = CustomAsmHelper.readDiscreteProperty(asm, "NAME");
+function _makeFakeParameterValues(parameters?: IEventParameter[]): any {
+  const parameterValues: any = {};
+  if (parameters && parameters.length) {
+    parameters.forEach(parameter => {
+      parameterValues[parameter.name] = 0;
+    });
+  }
+  return parameterValues;
+}
+
+/** Creates a custom event object from a code string. */
+export function createCustomEvent(language: EventCodeLanguage, code: string) {
+  let eventName = CustomAsmHelper.readDiscreteProperty(code, "NAME");
   if (!eventName || !eventName.trim()) {
     throw new Error("Custom event must have a name");
   }
   eventName = eventName.trim();
   const eventId = eventName;
 
-  const executionType = CustomAsmHelper.readExecutionType(asm);
+  const executionType = CustomAsmHelper.readExecutionType(code);
   if (!executionType) {
     throw new Error("Custom event must have execution type");
   }
 
-  const supportedGames = CustomAsmHelper.readSupportedGames(asm);
+  const supportedGames = CustomAsmHelper.readSupportedGames(code);
   if (!supportedGames) {
     throw new Error("Custom event must have supported games list");
   }
 
-  const parameters = CustomAsmHelper.readParameters(asm);
-
-  if (validate) {
-    CustomAsmHelper.validateParameters(parameters);
-
-    // Test that assembly works in all claimed supported versions.
-    for (let i = 0; i < supportedGames.length; i++) {
-      const game = supportedGames[i];
-      try {
-        CustomAsmHelper.testAssemble(asm, parameters, { game });
-      }
-      catch (e) {
-        const errorMsg = "Failed a test assembly for " + getGameName(game)
-        + ". The event may need adjustments before it can be used.\n\n" + e.toString();
-        console.error(errorMsg + "\n\n" + asm)
-        throw new Error(errorMsg);
-      }
-    }
-  }
-
+  const parameters = CustomAsmHelper.readParameters(code);
   const custEvent: ICustomEvent = {
     id: eventId,
     name: eventName,
     custom: true,
-    asm: asm,
-    activationType: EventActivationType.LANDON,
+    language,
+    asm: code,
+    activationType: EditorEventActivationType.LANDON,
     executionType: executionType,
     supportedGames: supportedGames,
     parameters: parameters,
@@ -168,20 +205,53 @@ export function createCustomEvent(asm: string, validate?: boolean) {
   return custEvent;
 }
 
-export function writeCustomEvent(dataView: DataView, spaceEvent: ISpaceEvent, info: IEventWriteInfo, asm: string, temp: any) {
-  $$log("Writing custom event", spaceEvent, info);
+export async function validateCustomEvent(event: ICustomEvent): Promise<boolean> {
+  const { language, parameters, supportedGames } = event;
 
-  // Assemble and write
-  if (info.gameVersion !== 2) {
-    return asm;
+  if (parameters) {
+    CustomAsmHelper.validateParameters(parameters);
   }
 
-  const customEvent = createCustomEvent(asm);
-  const preppedAsm = prepAsm(asm, customEvent, spaceEvent, info);
-  const bytes = assemble(preppedAsm) as ArrayBuffer;
+  const code = event.asm;
+
+  // Test that assembly works in all claimed supported versions.
+  for (let i = 0; i < supportedGames.length; i++) {
+    const game = supportedGames[i];
+    try {
+      await CustomAsmHelper.testCustomEvent(language!, code, parameters, { game });
+    }
+    catch (e) {
+      const errorMsg = "Failed a test compile/assembly for " + getGameName(game)
+      + ". The event code may need adjustments before it can be used.\n\n" + e.toString();
+      console.error(errorMsg + "\n\n" + code)
+      throw new Error(errorMsg);
+    }
+  }
+
+  return true;
+}
+
+export async function writeCustomEvent(dataView: DataView, spaceEvent: IEventInstance,
+  info: IEventWriteInfo, lang: EventCodeLanguage, code: string, temp: any) {
+  $$log("Writing custom event", spaceEvent, info);
+
+  const customEvent = createCustomEvent(lang, code);
+
+  if (lang === EventCodeLanguage.C) {
+    const preppedC = prepC(code, customEvent, spaceEvent, info);
+    code = await compile(preppedC);
+  }
+
+  if (info.gameVersion !== 2) {
+    return code;
+  }
+
+  const preppedAsm = prepAsm(code, customEvent, spaceEvent, info);
+  const symMap = Object.create(null);
+  const bytes = assemble(preppedAsm, { symbolOutputMap: symMap }) as ArrayBuffer;
   $$log(preppedAsm);
   copyRange(dataView, bytes, 0, 0, bytes.byteLength);
-  return [info.offset!, bytes.byteLength];
+  return [info.offset!, bytes.byteLength, symMap["main"] || 0];
 }
 
 // Yes, right here, load cached events...
@@ -191,7 +261,11 @@ if (cachedEvents && cachedEvents.length) {
     if (!eventObj || !(eventObj as ICustomEvent).asm)
       return;
     try {
-      const customEvent = createCustomEvent((eventObj as ICustomEvent).asm);
+      const customEventObj = eventObj as ICustomEvent;
+      const customEvent = createCustomEvent(
+        customEventObj.language || EventCodeLanguage.MIPS,
+        customEventObj.asm
+      );
       addEventToLibrary(customEvent);
     }
     catch (e) {

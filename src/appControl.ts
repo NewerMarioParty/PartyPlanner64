@@ -1,5 +1,5 @@
 import { romhandler } from "./romhandler";
-import { IBoard, ISpace } from "./boards";
+import { IBoard, ISpace, IEventInstance } from "./boards";
 import { View, Action } from "./types";
 import { IEvent } from "./events/events";
 import { Notification } from "./components/notifications";
@@ -59,6 +59,14 @@ export function getCurrentEvent() {
 
 export function getCurrentEventIsBoardEvent(): boolean {
   return getAppInstance().state.currentEventIsBoardEvent;
+}
+
+export function setHoveredBoardEvent(hoveredBoardEvent: IEventInstance | null) {
+  getAppInstance().setState({ hoveredBoardEvent });
+}
+
+export function getHoveredBoardEvent(): IEventInstance | null {
+  return getAppInstance().state.hoveredBoardEvent;
 }
 
 export function blockUI(blocked: boolean) {

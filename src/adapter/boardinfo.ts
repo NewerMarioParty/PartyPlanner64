@@ -4,8 +4,9 @@ import { getBoardInfos as getMP1JBoardInfos } from "./boardinfo.MP1.J";
 import { getBoardInfos as getMP2BoardInfos } from "./boardinfo.MP2";
 import { getBoardInfos as getMP3BoardInfos } from "./boardinfo.MP3";
 import { IBoardInfo } from "./boardinfobase";
+import { $$log } from "../utils/debug";
 
-export function getBoardInfos(gameID: Game): IBoardInfo[] {
+export function getBoardInfos(gameID: Game): IBoardInfo[] | null {
   switch(gameID) {
     case Game.MP1_USA:
       return getMP1UBoardInfos();
@@ -17,11 +18,12 @@ export function getBoardInfos(gameID: Game): IBoardInfo[] {
       return getMP3BoardInfos();
   }
 
-  throw new Error("Missing boardinfo for " + gameID);
+  $$log("Missing boardinfo for " + gameID);
+  return null;
 }
 
 export function getBoardInfoByIndex(gameID: Game, index: number): IBoardInfo {
-  return getBoardInfos(gameID)[index];
+  return getBoardInfos(gameID)![index];
 }
 
 export function getArrowRotationLimit() {

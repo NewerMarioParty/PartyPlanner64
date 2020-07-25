@@ -73,15 +73,14 @@ $header-logo-width: 215px;
 
 .headerDropdown {
   position: absolute;
-  top: 43px;
+  top: 44px;
   right: 0;
   z-index: 4;
   background-color: #B59C95; // Same as header
-  // min-width: 150px;
   max-width: 400px;
-  // min-height: 100px;
-  border: 1px solid rgba(0, 0, 0, 0.9);
-  border-top: 3px solid transparent;
+  border: 1px solid darken(#B59C95, 40);
+  border-radius: 6px;
+  box-shadow: 0 0 4px 2px rgba(0, 0, 0, 0.45);
   padding: 2px;
 }
 
@@ -159,4 +158,14 @@ $more-menu-border: 1px;
 }
 .headerMoreOpen .headerMoreMenu {
   transform: translateX(0);
+}
+
+.pendingDropdownBox {
+  width: 100px;
+  text-align: center;
+}
+.pendingDropdownImage {
+  width: 43px;
+  height: 11px;
+  margin: 5px 0 0 0;
 }

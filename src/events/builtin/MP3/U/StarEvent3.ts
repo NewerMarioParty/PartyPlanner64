@@ -1,6 +1,6 @@
 import { IEvent, IEventParseInfo, IEventWriteInfo } from "../../../events";
 import { hashEqual } from "../../../../utils/arrays";
-import { ISpaceEvent } from "../../../../boards";
+import { IEventInstance } from "../../../../boards";
 
 export const StarEvent3: Partial<IEvent> = {
   parse(dataView: DataView, info: IEventParseInfo) {
@@ -14,7 +14,7 @@ export const StarEvent3: Partial<IEvent> = {
 
     return false;
   },
-  write(dataView: DataView, event: ISpaceEvent, info: IEventWriteInfo, temp: any) {
+  write(dataView: DataView, event: IEventInstance, info: IEventWriteInfo, temp: any) {
     // Most of the code lives in the overlay.
     return `
       J __PP64_INTERNAL_STAR_SPACE_EVENT ; star_space_event

@@ -172,7 +172,10 @@ export const animationfs = {
   },
 
   extract() {
-    let startingOffset = animationfs.getROMOffset()!;
+    let startingOffset = animationfs.getROMOffset();
+    if (startingOffset === null) {
+      return null;
+    }
     let view = romhandler.getDataView();
     _animfsCache = animationfs._extractSets(view, startingOffset);
     return _animfsCache;

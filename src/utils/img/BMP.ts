@@ -21,36 +21,36 @@ export function BMPtoRGBA(buffer: ArrayBuffer | DataView, palette: number[], inB
   while (outIndex < outByteLength) {
     if (inBpp === 8) {
       paletteIdx = inView.getUint8(inIdx);
-      (outView as any)[outSetUintFn](outIndex, palette[paletteIdx]);
+      (outView as any)[outSetUintFn](outIndex, getPaletteEntry(palette, paletteIdx));
       inIdx += 1;
       outIndex += outPixelByteCount;
     }
     else if (inBpp === 4) {
       paletteIdx = (inView.getUint8(inIdx) & 0xF0) >> 4;
-      (outView as any)[outSetUintFn](outIndex, palette[paletteIdx]);
+      (outView as any)[outSetUintFn](outIndex, getPaletteEntry(palette, paletteIdx));
       outIndex += outPixelByteCount;
 
       paletteIdx = inView.getUint8(inIdx) & 0x0F;
-      (outView as any)[outSetUintFn](outIndex, palette[paletteIdx]);
+      (outView as any)[outSetUintFn](outIndex, getPaletteEntry(palette, paletteIdx));
       outIndex += outPixelByteCount;
 
       inIdx += 1;
     }
     else if (inBpp === 2) {
       paletteIdx = (inView.getUint8(inIdx) & 0xC0) >> 6;
-      (outView as any)[outSetUintFn](outIndex, palette[paletteIdx]);
+      (outView as any)[outSetUintFn](outIndex, getPaletteEntry(palette, paletteIdx));
       outIndex += outPixelByteCount;
 
       paletteIdx = (inView.getUint8(inIdx) & 0x30) >> 4;
-      (outView as any)[outSetUintFn](outIndex, palette[paletteIdx]);
+      (outView as any)[outSetUintFn](outIndex, getPaletteEntry(palette, paletteIdx));
       outIndex += outPixelByteCount;
 
       paletteIdx = (inView.getUint8(inIdx) & 0x0C) >> 2;
-      (outView as any)[outSetUintFn](outIndex, palette[paletteIdx]);
+      (outView as any)[outSetUintFn](outIndex, getPaletteEntry(palette, paletteIdx));
       outIndex += outPixelByteCount;
 
       paletteIdx = inView.getUint8(inIdx) & 0x03;
-      (outView as any)[outSetUintFn](outIndex, palette[paletteIdx]);
+      (outView as any)[outSetUintFn](outIndex, getPaletteEntry(palette, paletteIdx));
       outIndex += outPixelByteCount;
 
       inIdx += 1;
@@ -115,4 +115,11 @@ export function BMPfromRGBA(buffer: ArrayBuffer | DataView, inBpp: number, outBp
   }
 
   return [bmpBuffer, palette];
+}
+
+function getPaletteEntry(palette: number[], index: number): number {
+  if (index >= palette.length) {
+    throw new Error(`Invalid palette access (index ${index} of palette length ${palette.length})`);
+  }
+  return palette[index];
 }

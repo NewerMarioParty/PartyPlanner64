@@ -1,13 +1,13 @@
 import { IEventParseInfo, IEvent, IEventWriteInfo } from "../../../events";
-import { EventActivationType, EventExecutionType, Game } from "../../../../types";
+import { EditorEventActivationType, EventExecutionType, Game } from "../../../../types";
 import { hashEqual } from "../../../../utils/arrays";
-import { ISpaceEvent } from "../../../../boards";
+import { IEventInstance } from "../../../../boards";
 import { addEventToLibrary } from "../../../EventLibrary";
 
 export const ChanceTime: IEvent = {
   id: "CHANCETIME",
   name: "Chance Time",
-  activationType: EventActivationType.LANDON,
+  activationType: EditorEventActivationType.LANDON,
   executionType: EventExecutionType.DIRECT,
   supportedGames: [
     Game.MP1_USA,
@@ -24,7 +24,7 @@ export const ChanceTime: IEvent = {
 
     return false;
   },
-  write(dataView: DataView, event: ISpaceEvent, info: IEventWriteInfo, temp: any) {
+  write(dataView: DataView, event: IEventInstance, info: IEventWriteInfo, temp: any) {
     return `
       ADDIU SP SP 0xFFE0
       SW RA 0x18(SP)

@@ -2,7 +2,7 @@ import { AdapterBase } from "./AdapterBase";
 import { IBoard, ISpace, addEventToSpace } from "../boards";
 import { animationfs } from "../fs/animationfs";
 import { Space } from "../types";
-import { createSpaceEvent } from "../events/events";
+import { createEventInstance } from "../events/events";
 import { strings } from "../fs/strings";
 import { arrayToArrayBuffer, arrayBufferToDataURL, arrayBufferToImageData } from "../utils/arrays";
 import { hvqfs } from "../fs/hvqfs";
@@ -27,8 +27,6 @@ export const MP2 = new class MP2Adapter extends AdapterBase {
   public MAINFS_READ_ADDR: number = 0x00017680;
   public HEAP_FREE_ADDR: number = 0x00017800;
   public TABLE_HYDRATE_ADDR: number = 0x0005568C;
-
-  public SCENE_TABLE_ROM: number = 0x000C9474;
 
   public writeFullOverlay: boolean = false;
 
@@ -79,7 +77,7 @@ export const MP2 = new class MP2Adapter extends AdapterBase {
 
   hydrateSpace(space: ISpace, board: IBoard) {
     if (space.type === Space.BANK) {
-      addEventToSpace(board, space, createSpaceEvent(BankEvent));
+      addEventToSpace(board, space, createEventInstance(BankEvent));
     }
   }
 

@@ -1,7 +1,7 @@
 import { IEventParseInfo, IEventWriteInfo, IEvent } from "../../../events";
-import { EventActivationType, EventExecutionType, Game, EventParameterType } from "../../../../types";
+import { EditorEventActivationType, EventExecutionType, Game, EventParameterType } from "../../../../types";
 import { hashEqual } from "../../../../utils/arrays";
-import { addConnection, ISpaceEvent, addDecisionTree } from "../../../../boards";
+import { addConnection, IEventInstance, addDecisionTree } from "../../../../boards";
 import { addEventToLibrary } from "../../../EventLibrary";
 import { getSymbol } from "../../../../symbols/symbols";
 import { findCallsInFunction, getRegSetAddress } from "../../../../utils/MIPS";
@@ -12,7 +12,7 @@ import { parseDecisionTree } from "../../../../ai/aitrees";
 export const ChainSplit1: IEvent = {
   id: "CHAINSPLIT1",
   name: "",
-  activationType: EventActivationType.WALKOVER,
+  activationType: EditorEventActivationType.WALKOVER,
   executionType: EventExecutionType.PROCESS,
   parameters: [
     { name: "left_space", type: EventParameterType.Space },
@@ -68,7 +68,7 @@ export const ChainSplit1: IEvent = {
 
     return false;
   },
-  write(dataView: DataView, event: ISpaceEvent, info: IEventWriteInfo, temp: any) {
+  write(dataView: DataView, event: IEventInstance, info: IEventWriteInfo, temp: any) {
     const chains = event.parameterValues!["chains"] as number[];
     return `
         ADDIU SP SP 0xFFD8

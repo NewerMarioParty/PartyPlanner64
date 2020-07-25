@@ -129,7 +129,12 @@ canvas:focus {
   outline: none;
 }
 
-.editor_bg, .editor_line_canvas, .editor_current_space_canvas, .editor_space_canvas, .editor_menu_overlay {
+.editor_bg,
+.editor_line_canvas,
+.editor_current_space_canvas,
+.editor_space_canvas,
+.editor_menu_overlay,
+.editor_telescope_viewer {
   position: absolute;
   left: 0;
   top: 0;
@@ -145,6 +150,10 @@ canvas:focus {
 }
 .eraser .editor_space_canvas {
   cursor: url("../img/editor/eraser.cur"), default;
+}
+
+.editor_telescope_viewer {
+  cursor: crosshair;
 }
 
 .details {

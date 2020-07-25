@@ -1,28 +1,31 @@
-import { IBoard, getSpacesOfSubType } from "../boards";
+import { IBoard, getSpacesOfSubType, getDeadSpaceIndex } from "../boards";
 import { SpaceSubtype, Game } from "../types";
 import { distance } from "../utils/number";
 import { IBoardInfo } from "./boardinfobase";
 import { getSymbol } from "../symbols/symbols";
-import { defaultAdditionalBgAsm } from "../events/additionalbg";
 import { hvqfs } from "../fs/hvqfs";
-import { prepAdditionalBgAsm } from "../events/prepAdditionalBgAsm";
+import { getAdditionalBgAsmForOverlay } from "../events/prepAdditionalBg";
+import { getShuffleSeedData } from "./overlayutils";
 
-export function createBoardOverlay(board: IBoard, boardInfo: IBoardInfo, boardIndex: number): string {
+export async function createBoardOverlay(board: IBoard, boardInfo: IBoardInfo, boardIndex: number): Promise<string> {
   const [mainFsEventDir, mainFsEventFile] = boardInfo.mainfsEventFile!;
 
   const booIndices = getSpacesOfSubType(SpaceSubtype.BOO, board);
 
   const koopaIndices = getSpacesOfSubType(SpaceSubtype.KOOPA, board);
-  const koopaIndex = (!koopaIndices.length ? board._deadSpace! : koopaIndices[0]);
+  const koopaIndex = (!koopaIndices.length ? getDeadSpaceIndex(board) : koopaIndices[0]);
 
   const bowserIndices = getSpacesOfSubType(SpaceSubtype.BOWSER, board);
-  const bowserIndex = (!bowserIndices.length ? board._deadSpace! : bowserIndices[0]);
+  const bowserIndex = (!bowserIndices.length ? getDeadSpaceIndex(board) : bowserIndices[0]);
 
   let starIndices = [];
   for (let i = 0; i < board.spaces.length; i++) {
     if (board.spaces[i].star)
       starIndices.push(i);
   }
+
+  const show_next_star_fn = starIndices.length ? "show_next_star_spot" : "show_next_star_no_op";
+  const shuffleData = getShuffleSeedData(starIndices.length);
 
   let toadSpaces = getSpacesOfSubType(SpaceSubtype.TOAD, board);
   let toadIndices = [];
@@ -44,14 +47,12 @@ export function createBoardOverlay(board: IBoard, boardInfo: IBoardInfo, boardIn
     toadIndices.push(bestToadIdx);
   }
 
-  const additionalbgcode = board.additionalbgcode || defaultAdditionalBgAsm;
-
   // This runs before we've written the additional bgs, but we can predict the directories.
   const additionalBgIndices = board.additionalbg && board.additionalbg.map((bg, i) => {
     return hvqfs.getDirectoryCount() + i
   });
 
-  const preppedAdditionalBgCode = prepAdditionalBgAsm(additionalbgcode, boardInfo.bgDir, additionalBgIndices);
+  const preppedAdditionalBgCode = await getAdditionalBgAsmForOverlay(board, boardInfo.bgDir, additionalBgIndices);
 
 return `
 .org 0x800F65E0
@@ -72,6 +73,8 @@ return `
 
 .definelabel STAR_COUNT,${starIndices.length}
 .definelabel BOO_COUNT,${booIndices.length}
+
+.definelabel __PP64_INTERNAL_VAL_AUDIO_INDEX,${board.audioIndex || 0}
 
 main:
   addiu SP, SP, -0x18
@@ -112,38 +115,34 @@ func_800F663C:
   lui   S5, hi(CORE_800ED5C0)
   addiu S5, S5, lo(CORE_800ED5C0)
   addu  S1, R0, R0
-  lui S4, 0x2492
-  ori S4, S4, 0x4925
-  lui   S3, hi(func_800F663C_data1)
-  addiu S3, S3, lo(func_800F663C_data1)
-  lui   S2, hi(func_800F663C_data0)
-  addiu S2, S2, lo(func_800F663C_data0)
+  lui   S3, hi(shuffle_bias)
+  addiu S3, S3, lo(shuffle_bias)
+  lui   S2, hi(shuffle_order)
+  addiu S2, S2, lo(shuffle_order)
+
 L800F6680:
-  jal   GetRandomByte
-  NOP
-  andi  V0, V0, 0xFF
-  multu V0, S4
-  mfhi  A0
-  subu  V1, V0, A0
-  srl   V1, V1, 1
-  addu  A0, A0, V1
-  srl   A0, A0, 2
-  sll   V1, A0, 3
-  subu  V1, V1, A0
-  subu  V0, V0, V1
-  jal   GetRandomByte
-   andi  S0, V0, 0xFF
-  andi  V0, V0, 0xFF
-  multu V0, S4
-  mfhi  A0
-  subu  V1, V0, A0
-  srl   V1, V1, 1
-  addu  A0, A0, V1
-  srl   A0, A0, 2
-  sll   V1, A0, 3
-  subu  V1, V1, A0
-  subu  V0, V0, V1
-  andi  A0, V0, 0xff
+  ; rand1 = GetRandomByte() % STAR_COUNT;
+  jal	GetRandomByte
+  nop
+  li   S4, STAR_COUNT
+  div  V0, S4
+  nop
+  mfhi S0
+  nop
+  andi  S0, S0, 0xff
+  nop
+
+  ; rand2 = GetRandomByte() % STAR_COUNT;
+  jal	GetRandomByte
+  nop
+  li   S4, STAR_COUNT
+  div  V0, S4
+  nop
+  mfhi A0
+  nop
+  andi  A0, A0, 0xff
+  nop
+
   beq   S0, A0, L800F6740
    sll   V1, A0, 1
   addu  A3, V1, S3
@@ -174,8 +173,8 @@ L800F6744:
   bne  V0, R0, L800F6680
    NOP
   addu  S1, R0, R0
-  lui   A0, hi(func_800F663C_data0)
-  addiu A0, A0, lo(func_800F663C_data0)
+  lui   A0, hi(shuffle_order)
+  addiu A0, A0, lo(shuffle_order)
   sll   V0, S1, 1
 L800F6760:
   addu  V1, V0, S5
@@ -214,7 +213,7 @@ func_800F67A4:
   lh    S0, lo(CORE_800ED5D8)(S0)
   lui   AT, hi(CORE_800ED5CA)
   sh    R0, lo(CORE_800ED5CA)(AT)
-  jal   SetBoardFeatureEnabled
+  jal   SetBoardFeatureFlag
    addiu    A0, R0, 68
   jal   func_800F663C
    NOP
@@ -258,12 +257,12 @@ L800F686C:
    addiu    A1, R0, 1
   addu  S0, S0, S3
   lh    A0, 0(S0)
-  jal   SetBoardFeatureEnabled
+  jal   SetBoardFeatureFlag
    addiu S1, S1, 1
   slti  V0, S1, STAR_COUNT
   bnel V0, R0, L800F686C
    sll   S0, S1, 1
-  jal   IsBoardFeatureDisabled
+  jal   IsBoardFeatureFlagSet
    addiu    A0, R0, 68
   bne  V0, R0, L800F68AC
    addiu    S0, R0, STAR_COUNT
@@ -304,7 +303,7 @@ L800F68EC:
   sll   V0, V0, 1
   lui   A0, hi(data_mystery_40s_list)
   addu  A0, A0, V0
-  jal   SetBoardFeatureDisabled
+  jal   ClearBoardFeatureFlag
    lh    A0, lo(data_mystery_40s_list)(A0)
   lw    RA, 0x2c(SP)
   lw    S4, 0x28(SP)
@@ -346,7 +345,7 @@ L800F6990:
   j     L800F6A24
    addiu    V0, R0, 1
 L800F69C8:
-  jal   IsBoardFeatureDisabled
+  jal   IsBoardFeatureFlagSet
    addiu    A0, R0, 68
   bne  V0, R0, L800F69DC
    addiu    A0, R0, STAR_COUNT
@@ -597,7 +596,7 @@ L800F6D38:
   lh    V0, 0xa(S2)
   bne  V0, R0, L800F6D78
    addiu    A1, R0, 1258
-  jal   IsBoardFeatureDisabled
+  jal   IsBoardFeatureFlagSet
    addiu    A0, R0, 68
   bnel V0, R0, L800F6D78
    addiu    A1, R0, 1258 ; "Let me show you where to find the next Star."
@@ -663,7 +662,7 @@ L800F6E28:
   lh    V0, 0xa(S2)
   bne  V0, R0, L800F6E74
    addiu    A1, R0, 1259
-  jal   IsBoardFeatureDisabled
+  jal   IsBoardFeatureFlagSet
    addiu    A0, R0, 68
   bnel V0, R0, L800F6E74
    addiu    A1, R0, 1259 ; "This is the star spot. Get the star by giving Toad 20 coins"
@@ -707,6 +706,33 @@ L800F6E74:
   lw    S0, 0x10(SP)
   jr    RA
    addiu SP, SP, 0x20
+
+; This custom alternative is the minimum necessary to skip Toad's star showing.
+show_next_star_no_op:
+  addiu SP, SP, -0x18
+  sw    RA, 0x10(SP)
+
+  ; Causes fade back in (star shaped fade in)
+  addiu    A0, R0, 2
+  jal   0x80072644
+  addiu    A1, R0, 16
+
+  ; One or more of these may be unnecessary...
+  jal   0x800601D4
+  addiu    A0, R0, 90
+  jal   0x80056AF4
+  NOP
+  jal   0x8005DFB8
+  addiu    A0, R0, 1
+  jal   0x8005E3A8
+  NOP
+
+  jal SleepVProcess
+  nop
+
+  lw    RA, 0x10(SP)
+  jr    RA
+  addiu SP, SP, 0x18
 
 overlaycall0:
   addiu SP, SP, -0x18
@@ -756,23 +782,23 @@ overlaycall1:
   j     L800F6FEC
    NOP
 L800F6FB8:
-  jal   SetBoardFeatureEnabled
+  jal   SetBoardFeatureFlag
    addiu    A0, R0, 0x46
-  jal   SetBoardFeatureEnabled
+  jal   SetBoardFeatureFlag
    addiu    A0, R0, 0x47
-  jal   SetBoardFeatureEnabled
+  jal   SetBoardFeatureFlag
    addiu    A0, R0, 0x49
   j     L800F6FE4
    addiu    A0, R0, 0x4B
 L800F6FD8:
-  jal   SetBoardFeatureEnabled
+  jal   SetBoardFeatureFlag
    addiu    A0, R0, 0x47
   addiu    A0, R0, 0x49
 L800F6FE4:
-  jal   SetBoardFeatureEnabled
+  jal   SetBoardFeatureFlag
    NOP
 L800F6FEC:
-  jal   SetBoardFeatureEnabled
+  jal   SetBoardFeatureFlag
    addiu    A0, R0, 0x43
   jal   func_800F663C
    NOP
@@ -847,27 +873,29 @@ L800F70C0:
   slti  V0, S1, 4
   bne  V0, R0, L800F70C0
    NOP
-  jal   IsBoardFeatureDisabled
+  jal   IsBoardFeatureFlagSet
    addiu    A0, R0, 78
   beq  V0, R0, L800F7114
    NOP
-  jal   SetBoardFeatureDisabled
+  jal   ClearBoardFeatureFlag
    addiu    A0, R0, 78
   jal   func_800F67A4
    NOP
 L800F7114:
+.if STAR_COUNT
   jal   draw_star_space_state
    NOP
   jal   draw_toads_outer
    NOP
-  jal   IsBoardFeatureDisabled
+.endif
+  jal   IsBoardFeatureFlagSet
    addiu    A0, R0, 14
   bne  V0, R0, L800F714C
    NOP
   jal   koopa_draw_outer
    NOP
 L800F714C:
-  jal   IsBoardFeatureDisabled
+  jal   IsBoardFeatureFlagSet
    addiu    A0, R0, 15
   bne  V0, R0, L800F7164
    NOP
@@ -876,7 +904,7 @@ L800F714C:
 .endif
    NOP
 L800F7164:
-  jal   IsBoardFeatureDisabled
+  jal   IsBoardFeatureFlagSet
    addiu    A0, R0, 13
   bne  V0, R0, L800F717C
    NOP
@@ -891,11 +919,22 @@ L800F717C:
 
 ${preppedAdditionalBgCode}
 
+; A function that returns the audio index, to let custom events call to get the value.
+__PP64_INTERNAL_GET_BOARD_AUDIO_INDEX:
+jr    RA
+ li V0 __PP64_INTERNAL_VAL_AUDIO_INDEX
+
 overlaycall2:
   addiu SP, SP, -0x18
   sw    RA, 0x10(SP)
+
+  jal __PP64_INTERNAL_GET_BOARD_AUDIO_INDEX
+   nop
+
+  ; Start playing board audio.
   jal   0x80060128
-   addiu A0, R0, ${board.audioIndex || 0}
+   move A0, V0
+
   jal   0x8001D240
    addiu A0, R0, 2
   jal   setup_routine
@@ -904,7 +943,7 @@ overlaycall2:
    NOP
 
 ; TODO: Support the disabled koopa, boo, bowser setting with split event tables
-;  jal   IsBoardFeatureDisabled
+;  jal   IsBoardFeatureFlagSet
 ;   addiu A0, R0, 14
 ;  bne  V0, R0, L800F71D8
 ;   NOP
@@ -912,7 +951,7 @@ overlaycall2:
 ;  jal   EventTableHydrate
 ;   addiu A0, A0, lo(koopa_event_table)
 ;L800F71D8:
-;  jal   IsBoardFeatureDisabled
+;  jal   IsBoardFeatureFlagSet
 ;   addiu A0, R0, 15
 ;  bne  V0, R0, L800F71F4
 ;   NOP
@@ -920,7 +959,7 @@ overlaycall2:
 ;  jal   EventTableHydrate
 ;   addiu A0, A0, lo(boo_event_table)
 ;L800F71F4:
-;  jal   IsBoardFeatureDisabled
+;  jal   IsBoardFeatureFlagSet
 ;   addiu A0, R0, 13
 ;  bne  V0, R0, L800F7210
 ;   NOP
@@ -1124,7 +1163,7 @@ L800F74C0:
   sw    R0, 0(V0)
   sll   V0, S0, 1
   addu  V0, V0, S1
-  jal   IsBoardFeatureDisabled
+  jal   IsBoardFeatureFlagSet
    lh    A0, 0(V0)
   bnel V0, R0, L800F74F0
    addiu S0, S0, 1
@@ -1258,8 +1297,8 @@ overlaycall4:
    NOP
   jal   0x800584F0
    addiu    A0, R0, 2
-  lui   A0, hi(show_next_star_spot)
-  addiu A0, A0, lo(show_next_star_spot)
+  lui   A0, hi(${show_next_star_fn})
+  addiu A0, A0, lo(${show_next_star_fn})
   addiu    A1, R0, 4101
   addu  A2, R0, R0
   jal   InitProcess
@@ -1331,22 +1370,24 @@ data_screen_dimensions:
 .word 0x43A00000 ; 320
 .word 0x43700000 ; 240
 
-func_800F663C_data0:
-.word 0x00030005, 0x00060000, 0x00010002, 0x00040000
+shuffle_order:
+.halfword ${shuffleData.order.join(",")}
 
-func_800F663C_data1:
-.word 0x00000000, 0x00000001, 0x00010001, 0x00030000
+.align 4
+shuffle_bias:
+.halfword ${shuffleData.bias.join(",")}
 
+.align 4
 data_mystery_40s_list:
-.halfword 0x46, 0x47, 0x48, 0x49, 0x4A, 0x4B, 0x4C, 0
+.halfword 0x46, 0x47, 0x48, 0x49, 0x4A, 0x4B, 0x4C
 
 .align 4
 star_space_indices:
-.halfword ${starIndices.join(",")}
+.halfword ${starIndices.join(",") || 0}
 
 .align 4
 toad_space_indices:
-.halfword ${toadIndices.join(",")}
+.halfword ${toadIndices.join(",") || 0}
 
 .align 4
 data_star_related_800F9920:
@@ -1354,7 +1395,7 @@ data_star_related_800F9920:
 
 .align 4
 toad_space_indices_repeat:
-.halfword ${toadIndices.join(",")}
+.halfword ${toadIndices.join(",") || 0}
 
 .align 4
 data_mystery_40s_list_2:
@@ -1379,7 +1420,7 @@ bss_bowser_model: .word 0
 bss_koopa_model: .word 0
 
 bss_toad_model: .word 0
-bss_toad_instances: .word ${toadIndices.map(() => 0).join(",")}
+bss_toad_instances: .word ${toadIndices.map(() => 0).join(",") || 0}
 
 .if BOO_COUNT
 bss_boo_model: .word 0

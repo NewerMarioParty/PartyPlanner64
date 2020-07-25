@@ -1,12 +1,12 @@
 import { IEventParseInfo, IEventWriteInfo, IEvent } from "../../../events";
-import { EventActivationType, EventExecutionType, Game } from "../../../../types";
+import { EditorEventActivationType, EventExecutionType, Game } from "../../../../types";
 import { hashEqual } from "../../../../utils/arrays";
-import { ISpaceEvent } from "../../../../boards";
+import { IEventInstance } from "../../../../boards";
 
 export const StarEvent1: IEvent = {
   id: "STAR1",
   name: "Buy star",
-  activationType: EventActivationType.WALKOVER,
+  activationType: EditorEventActivationType.WALKOVER,
   executionType: EventExecutionType.DIRECT,
   fakeEvent: true,
   supportedGames: [
@@ -31,7 +31,7 @@ export const StarEvent1: IEvent = {
 
     return false;
   },
-  write(dataView: DataView, event: ISpaceEvent, info: IEventWriteInfo, temp: any) {
+  write(dataView: DataView, event: IEventInstance, info: IEventWriteInfo, temp: any) {
     return `
       addiu SP, SP, -0x18
       sw    RA, 0x10(SP)

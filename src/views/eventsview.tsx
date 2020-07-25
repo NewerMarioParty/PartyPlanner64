@@ -1,9 +1,9 @@
-import { View } from "../types";
+import { View, EventCodeLanguage } from "../types";
 import * as React from "react";
 import { getCustomEvents, IEvent } from "../events/events";
 import { ICustomEvent, createCustomEvent } from "../events/customevents";
 import { changeCurrentEvent, changeView, confirmFromUser } from "../appControl";
-import { IBoard, removeEventFromBoard, addEventToBoard } from "../boards";
+import { IBoard, excludeEventFromBoard, includeEventInBoard, getBoardEvent } from "../boards";
 import { removeEventFromLibrary, getEventFromLibrary, addEventToLibrary } from "../events/EventLibrary";
 import { saveAs } from "file-saver";
 
@@ -18,6 +18,7 @@ import copytoboardImage from "../img/events/copytoboard.png";
 import copytoboard_destructiveImage from "../img/events/copytoboard_destructive.png";
 
 import "../css/events.scss";
+import { stringComparer } from "../utils/string";
 
 let _eventsViewInstance: EventsView | null;
 
@@ -46,15 +47,16 @@ export class EventsView extends React.Component<IEventsViewProps, IEventsViewSta
       );
     }
 
-    let listing = null;
     const board = this.props.board;
-    const customEvents = getCustomEvents();
+    let listing = null;
+    let customEvents = getCustomEvents();
     if (!customEvents.length) {
       listing = (
         <tr><td>No custom events present — load or create your own!</td></tr>
       );
     }
     else {
+      customEvents = customEvents.sort((a, b) => stringComparer(a.name, b.name));
       listing = customEvents.map(customEvent => {
         const isDestructive = _copyToBoardWillOverwrite(customEvent, board);
         const isUnchanged = _boardAndLibraryEventAreInSync(customEvent, board);
@@ -71,7 +73,8 @@ export class EventsView extends React.Component<IEventsViewProps, IEventsViewSta
 
     let boardEvents = [];
     for (let eventName in board.events) {
-      const customEvent = createCustomEvent(board.events[eventName]);
+      const boardEvent = getBoardEvent(board, eventName)!;
+      const customEvent = createCustomEvent(boardEvent.language, boardEvent.code);
       const isDestructive = _copyToLibraryWillOverwrite(customEvent);
       const isUnchanged = _boardAndLibraryEventAreInSync(customEvent, board);
       boardEvents.push(
@@ -82,6 +85,7 @@ export class EventsView extends React.Component<IEventsViewProps, IEventsViewSta
           onCopyToLibrary={isUnchanged ? undefined : this.onCopyToLibrary} />
       );
     }
+    boardEvents = boardEvents.sort((a, b) => stringComparer(a.key as string, b.key as string));
 
     return (
       <div className="eventsViewContainer">
@@ -115,12 +119,12 @@ export class EventsView extends React.Component<IEventsViewProps, IEventsViewSta
 
   onEditEvent = (event: IEvent) => {
     changeCurrentEvent(event);
-    changeView(View.CREATEEVENT);
+    changeView(_getViewForEvent(event));
   }
 
   onEditBoardEvent = (event: IEvent) => {
     changeCurrentEvent(event, this.props.board);
-    changeView(View.CREATEEVENT);
+    changeView(_getViewForEvent(event));
   }
 
   onDeleteEvent = async (event: IEvent) => {
@@ -131,8 +135,8 @@ export class EventsView extends React.Component<IEventsViewProps, IEventsViewSta
   }
 
   onDeleteBoardEvent = async (event: IEvent) => {
-    if (await confirmFromUser(`Are you sure you want to delete ${event.name}?`)) {
-      removeEventFromBoard(this.props.board, event.id);
+    if (await confirmFromUser(`Are you sure you want to delete ${event.name} from the board?`)) {
+      excludeEventFromBoard(this.props.board, event.id);
       this.forceUpdate();
     }
   }
@@ -143,7 +147,7 @@ export class EventsView extends React.Component<IEventsViewProps, IEventsViewSta
       proceed = await confirmFromUser(`Are you sure you want to overwrite the board's copy of ${event.id}? The two copies are different.`);
     }
     if (proceed) {
-      addEventToBoard(this.props.board, event.id, event.asm);
+      includeEventInBoard(this.props.board, event);
       this.forceUpdate();
     }
   }
@@ -157,6 +161,16 @@ export class EventsView extends React.Component<IEventsViewProps, IEventsViewSta
       addEventToLibrary(event);
       this.forceUpdate();
     }
+  }
+}
+
+function _getViewForEvent(event: IEvent): View {
+  switch (event.language) {
+    case EventCodeLanguage.C:
+      return View.CREATEEVENT_C;
+
+    default:
+      return View.CREATEEVENT_ASM;
   }
 }
 
@@ -197,7 +211,7 @@ function _boardAndLibraryEventAreInSync(customEvent: ICustomEvent, board: IBoard
   const libEvent = getEventFromLibrary(customEvent.id) as ICustomEvent;
   if (!libEvent)
     return false;
-  return board.events[customEvent.id] === libEvent.asm;
+  return getBoardEvent(board, customEvent.id)!.code === libEvent.asm;
 }
 
 interface IEventRowProps {
@@ -258,7 +272,10 @@ class EventRow extends React.Component<IEventRowProps> {
         {copyOption}
         <td className="eventNameTableCell"
           onClick={() => this.props.onEditEvent(this.props.event)}>
-          <span className="eventNameText">{this.props.event.name}</span>
+          <span className="eventNameText">
+            {this.props.event.name}
+            <span className="eventNameExtensionText">{getEventFileExtension(this.props.event)}</span>
+          </span>
           <img src={editImage} className="eventEditCellIcon"
             alt="Edit event" title="Edit event"/>
         </td>
@@ -268,13 +285,28 @@ class EventRow extends React.Component<IEventRowProps> {
 
   onExportEvent = () => {
     const event = this.props.event;
-    let asmBlob = new Blob([event.asm]);
-    saveAs(asmBlob, event.id + ".s");
+    const asmBlob = new Blob([event.asm]);
+    saveAs(asmBlob, getEventFileName(event));
   }
 }
 
 export function refreshEventsView() {
   if (_eventsViewInstance) {
     _eventsViewInstance.forceUpdate();
+  }
+}
+
+function getEventFileName(event: ICustomEvent): string {
+  return event.id + getEventFileExtension(event);
+}
+
+function getEventFileExtension(event: ICustomEvent): string {
+  switch (event.language) {
+    case EventCodeLanguage.C:
+      return ".c";
+
+    case EventCodeLanguage.MIPS:
+    default:
+      return ".s";
   }
 }

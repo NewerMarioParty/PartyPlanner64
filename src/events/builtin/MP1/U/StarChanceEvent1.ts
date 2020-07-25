@@ -1,7 +1,7 @@
 import { IEventParseInfo, IEvent, IEventWriteInfo } from "../../../events";
-import { EventActivationType, EventExecutionType, Game } from "../../../../types";
+import { EditorEventActivationType, EventExecutionType, Game } from "../../../../types";
 import { hashEqual } from "../../../../utils/arrays";
-import { ISpaceEvent } from "../../../../boards";
+import { IEventInstance } from "../../../../boards";
 import { addEventToLibrary } from "../../../EventLibrary";
 
 // This pseudo-event handles when the player lands on a previously visited star space.
@@ -9,7 +9,7 @@ import { addEventToLibrary } from "../../../EventLibrary";
 export const StarChanceEvent: IEvent = {
   id: "STARCHANCE",
   name: "Chance Time from old star space",
-  activationType: EventActivationType.LANDON,
+  activationType: EditorEventActivationType.LANDON,
   executionType: EventExecutionType.DIRECT,
   fakeEvent: true,
   supportedGames: [
@@ -27,7 +27,7 @@ export const StarChanceEvent: IEvent = {
 
     return false;
   },
-  write(dataView: DataView, event: ISpaceEvent, info: IEventWriteInfo, temp: any) {
+  write(dataView: DataView, event: IEventInstance, info: IEventWriteInfo, temp: any) {
     return `
       addiu SP, SP, -0x20
       sw    RA, 0x18(SP)

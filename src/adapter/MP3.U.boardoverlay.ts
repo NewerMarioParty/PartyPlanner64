@@ -1,4 +1,4 @@
-import { IBoard, getSpacesOfSubType, getSpacesWithEvent, forEachEvent } from "../boards";
+import { IBoard, getSpacesOfSubType, getSpacesWithEvent, forEachEvent, getDeadSpaceIndex } from "../boards";
 import { IBoardInfo } from "./boardinfobase";
 import { SpaceSubtype, Game, Space } from "../types";
 import { distance, getRawFloat32Format } from "../utils/number";
@@ -8,23 +8,43 @@ import { GateParameterNames } from "../events/builtin/MP3/U/GateEvent3";
 import { getArrowRotationLimit } from "./boardinfo";
 import { $$hex } from "../utils/debug";
 import { hvqfs } from "../fs/hvqfs";
-import { defaultAdditionalBgAsm } from "../events/additionalbg";
-import { prepAdditionalBgAsm } from "../events/prepAdditionalBgAsm";
+import { getAdditionalBgAsmForOverlay } from "../events/prepAdditionalBg";
+import { getShuffleSeedData } from "./overlayutils";
 
-export function createBoardOverlay(board: IBoard, boardInfo: IBoardInfo, boardIndex: number): string {
+export async function createBoardOverlay(board: IBoard, boardInfo: IBoardInfo, boardIndex: number): Promise<string> {
   const [mainFsEventDir, mainFsEventFile] = boardInfo.mainfsEventFile!;
 
   const booIndices = getSpacesOfSubType(SpaceSubtype.BOO, board);
-  const booIndex = (!booIndices.length ? board._deadSpace! : booIndices[0]);
+  const booIndex = (!booIndices.length ? getDeadSpaceIndex(board) : booIndices[0]);
   let booEventSpaces = getSpacesWithEvent(BooEvent.id, board);
-  if (!booEventSpaces.length) booEventSpaces = [board._deadSpace!];
+  let primaryBooEventSpace: number = -1;
+  if (!booEventSpaces.length) {
+    booEventSpaces = [getDeadSpaceIndex(board)];
+  }
+  else {
+    let bestDistance = Number.MAX_VALUE;
+    const booSpace = board.spaces[booIndex];
+    if (booSpace) {
+      for (const booEventSpaceIndex of booEventSpaces) {
+        const booEventSpace = board.spaces[booEventSpaceIndex];
+        const dist = distance(booEventSpace.x, booEventSpace.y, booSpace.x, booSpace.y);
+        if (dist < bestDistance) {
+          bestDistance = dist;
+          primaryBooEventSpace = booEventSpaceIndex;
+        }
+      }
+    }
+  }
 
-  let starIndices = [];
+  const starIndices = [];
   for (let i = 0; i < board.spaces.length; i++) {
     if (board.spaces[i].star) {
       starIndices.push(i);
     }
   }
+
+  const show_next_star_fn = starIndices.length ? "show_next_star_spot" : "show_next_star_no_op";
+  const shuffleData = getShuffleSeedData(starIndices.length);
 
   const toadSpaces = getSpacesOfSubType(SpaceSubtype.TOAD, board);
 
@@ -48,7 +68,7 @@ export function createBoardOverlay(board: IBoard, boardInfo: IBoardInfo, boardIn
 
   const bankCoinSpaces = getSpacesOfSubType(SpaceSubtype.BANKCOIN, board);
   for (let i = 0; i < 2; i++) { // Ensure at least 2
-    if (bankCoinSpaces.length < 2) bankCoinSpaces.push(board._deadSpace!);
+    if (bankCoinSpaces.length < 2) bankCoinSpaces.push(getDeadSpaceIndex(board));
   }
 
   // Find the closest Bank subtype space for each bank event space.
@@ -58,7 +78,7 @@ export function createBoardOverlay(board: IBoard, boardInfo: IBoardInfo, boardIn
   bankEventSpaces.forEach(spaceIndex => {
     const eventSpace = board.spaces[spaceIndex];
     let bestDistance = Number.MAX_VALUE;
-    let bestBankIdx = board._deadSpace!;
+    let bestBankIdx = getDeadSpaceIndex(board);
     for (let b = 0; b < bankSpaces.length; b++) {
       let bankIdx = bankSpaces[b];
       let bankSpace = board.spaces[bankIdx];
@@ -70,12 +90,12 @@ export function createBoardOverlay(board: IBoard, boardInfo: IBoardInfo, boardIn
     }
     bestBankForBankSpaces.push(bestBankIdx);
   });
-  if (!bankSpaces.length) bankSpaces.push(board._deadSpace!);
+  if (!bankSpaces.length) bankSpaces.push(getDeadSpaceIndex(board));
   for (let i = 0; i < 2; i++) { // Ensure at least 2
-    if (bankEventSpaces.length < 2) bankEventSpaces.push(board._deadSpace!);
+    if (bankEventSpaces.length < 2) bankEventSpaces.push(getDeadSpaceIndex(board));
   }
   for (let i = 0; i < 2; i++) { // Ensure at least 2
-    if (bestBankForBankSpaces.length < 2) bestBankForBankSpaces.push(board._deadSpace!);
+    if (bestBankForBankSpaces.length < 2) bestBankForBankSpaces.push(getDeadSpaceIndex(board));
   }
 
   // Find the closest ItemShop subtype space for each shop event space.
@@ -85,7 +105,7 @@ export function createBoardOverlay(board: IBoard, boardInfo: IBoardInfo, boardIn
   itemShopEventSpaces.forEach(spaceIndex => {
     const eventSpace = board.spaces[spaceIndex];
     let bestDistance = Number.MAX_VALUE;
-    let bestShopIdx = board._deadSpace!;
+    let bestShopIdx = getDeadSpaceIndex(board);
     for (let b = 0; b < itemShopSpaces.length; b++) {
       let shopIdx = itemShopSpaces[b];
       let shopSpace = board.spaces[shopIdx];
@@ -97,12 +117,12 @@ export function createBoardOverlay(board: IBoard, boardInfo: IBoardInfo, boardIn
     }
     bestShopForShopEventSpaces.push(bestShopIdx);
   });
-  if (!itemShopSpaces.length) itemShopSpaces.push(board._deadSpace!);
+  if (!itemShopSpaces.length) itemShopSpaces.push(getDeadSpaceIndex(board));
   for (let i = 0; i < 2; i++) { // Ensure at least 2
-    if (itemShopEventSpaces.length < 2) itemShopEventSpaces.push(board._deadSpace!);
+    if (itemShopEventSpaces.length < 2) itemShopEventSpaces.push(getDeadSpaceIndex(board));
   }
   for (let i = 0; i < 2; i++) { // Ensure at least 2
-    if (bestShopForShopEventSpaces.length < 2) bestShopForShopEventSpaces.push(board._deadSpace!);
+    if (bestShopForShopEventSpaces.length < 2) bestShopForShopEventSpaces.push(getDeadSpaceIndex(board));
   }
 
   // We want to get the important details about the gate event
@@ -150,9 +170,9 @@ export function createBoardOverlay(board: IBoard, boardInfo: IBoardInfo, boardIn
   });
   for (let i = 0; i < 2; i++) { // Ensure at least 2
     if (gateEventInfos.length < 2) gateEventInfos.push({
-      gateEntryIndex: board._deadSpace!,
-      gateSpaceIndex: board._deadSpace!,
-      gateExitIndex: board._deadSpace!,
+      gateEntryIndex: getDeadSpaceIndex(board),
+      gateSpaceIndex: getDeadSpaceIndex(board),
+      gateExitIndex: getDeadSpaceIndex(board),
       gatePrevChain: [0, 0],
       gateNextChain: [0, 0],
     });
@@ -176,14 +196,12 @@ export function createBoardOverlay(board: IBoard, boardInfo: IBoardInfo, boardIn
 
   const mirageStarEnabled = false; // Hard code to false for now.
 
-  const additionalbgcode = board.additionalbgcode || defaultAdditionalBgAsm;
-
   // This runs before we've written the additional bgs, but we can predict the directories.
   const additionalBgIndices = board.additionalbg && board.additionalbg.map((bg, i) => {
     return hvqfs.getDirectoryCount() + i
   });
 
-  const preppedAdditionalBgCode = prepAdditionalBgAsm(additionalbgcode, boardInfo.bgDir, additionalBgIndices);
+  const preppedAdditionalBgCode = await getAdditionalBgAsmForOverlay(board, boardInfo.bgDir, additionalBgIndices);
 
   return `
 .org 0x801059A0
@@ -255,6 +273,8 @@ export function createBoardOverlay(board: IBoard, boardInfo: IBoardInfo, boardIn
 .definelabel STAR_COUNT,${starIndices.length}
 .definelabel BOO_COUNT,${booIndices.length}
 
+.definelabel __PP64_INTERNAL_VAL_AUDIO_INDEX,${board.audioIndex || 0}
+
 main:
 addiu SP, SP, -0x18
 sw    RA, 0x10(SP)
@@ -292,16 +312,34 @@ sw    S0, 0x10(SP)
 lui   S4, hi(CORE_800CD058)
 addiu S4, S4, lo(CORE_800CD058)
 move  S1, R0
-lui   S3, hi(D_8011D290)
-addiu S3, S3, lo(D_8011D290)
-lui   S2, hi(D_8011D280)
-addiu S2, S2, lo(D_8011D280)
+lui   S3, hi(shuffle_bias)
+addiu S3, S3, lo(shuffle_bias)
+lui   S2, hi(shuffle_order)
+addiu S2, S2, lo(shuffle_order)
+
 L80105EE0:
-jal   GetRandomByte
-       NOP
-jal   GetRandomByte
- andi  S0, V0, 7
-andi  A0, V0, 7
+; rand1 = GetRandomByte() % STAR_COUNT;
+jal	GetRandomByte
+nop
+li   A0, STAR_COUNT
+div  V0, A0
+nop
+mfhi S0
+nop
+andi  S0, S0, 0xff
+nop
+
+; rand2 = GetRandomByte() % STAR_COUNT;
+jal	GetRandomByte
+nop
+li   A0, STAR_COUNT
+div  V0, A0
+nop
+mfhi A0
+nop
+andi  A0, A0, 0xff
+nop
+
 beq   S0, A0, L80105F50
  sll   V1, A0, 1
 addu  A3, V1, S3
@@ -332,8 +370,8 @@ slti  V0, S1, 0x3c
 bnez  V0, L80105EE0
        NOP
 move  S1, R0
-lui   A0, hi(D_8011D280)
-addiu A0, A0, lo(D_8011D280)
+lui   A0, hi(shuffle_order)
+addiu A0, A0, lo(shuffle_order)
 addu  V1, S4, S1
 L80105F70:
 sll   V0, S1, 1
@@ -341,7 +379,7 @@ addu  V0, V0, A0
 lbu   V0, 1(V0)
 sb    V0, 6(V1)
 addiu S1, S1, 1
-slti  V0, S1, 8
+slti  V0, S1, STAR_COUNT
 bnez  V0, L80105F70
  addu  V1, S4, S1
 lw    RA, 0x24(SP)
@@ -364,7 +402,7 @@ lui   AT, hi(CORE_800CD05D)
 sb    V0, lo(CORE_800CD05D)(AT)
 sll   V0, V0, 0x18
 sra   V0, V0, 0x18
-slti  V0, V0, 8
+slti  V0, V0, STAR_COUNT
 bnez  V0, L8010602C
        NOP
 lui   S0, hi(CORE_800CD065)
@@ -773,7 +811,7 @@ ldc1  F20, 0x18(SP)
 jr    RA
  addiu SP, SP, 0x20
 
-func_801065D0:
+show_next_star_spot:
 addiu SP, SP, -0x30
 sw    RA, 0x28(SP)
 sw    S3, 0x24(SP)
@@ -1018,6 +1056,31 @@ lw    S1, 0x1c(SP)
 lw    S0, 0x18(SP)
 jr    RA
  addiu SP, SP, 0x30
+
+; This custom alternative is the minimum necessary to skip the star showing.
+show_next_star_no_op:
+addiu SP, SP, -0x18
+sw    RA, 0x10(SP)
+
+; Causes fade back in (star shaped fade in)
+li    A0, 2
+jal   InitFadeIn
+ li    A1, 16
+
+; One or more of these may be unnecessary...
+jal   0x800F8C74
+ nop
+jal   0x8004819C
+ li    A0, 1
+jal   0x8004849C
+ nop
+
+jal SleepVProcess
+nop
+
+lw    RA, 0x10(SP)
+jr    RA
+addiu SP, SP, 0x18
 
 ; separate process that does "star get" celebration.
 func_8010698C:
@@ -2422,7 +2485,7 @@ lh    A1, 0(V0)
 jal   0x800EA6E0
  move  A0, S0
 addiu S0, S0, 1
-slti  V0, S0, 8
+slti  V0, S0, STAR_COUNT
 bnez  V0, L80107F5C
  sll   V0, S0, 1
 jal   0x80035F98
@@ -2435,10 +2498,12 @@ jal   func_80105FB0
        NOP
 ; drawing things
 L80107F9C:
+.if STAR_COUNT
 jal   draw_star_space_state
        NOP
 jal   draw_millenium_stars
        NOP
+.endif
 jal   draw_boo
        NOP
 jal   draw_bank_coins
@@ -2462,16 +2527,27 @@ jr    RA
 
 ${preppedAdditionalBgCode}
 
+; A function that returns the audio index, to let custom events call to get the value.
+__PP64_INTERNAL_GET_BOARD_AUDIO_INDEX:
+jr    RA
+ li V0 __PP64_INTERNAL_VAL_AUDIO_INDEX
+
 overlaycall2:
 addiu SP, SP, -0x18
 sw    RA, 0x10(SP)
+
+jal __PP64_INTERNAL_GET_BOARD_AUDIO_INDEX
+ nop
+
+; Start playing board audio.
 jal   0x8004A520
- li    A0, ${board.audioIndex || 0}
-li    V0, 24 ; TODO: Are these also the audio index?
+ move    A0, V0
+
+li    V0, __PP64_INTERNAL_VAL_AUDIO_INDEX
 lui   AT, hi(CORE_800CE198)
 sh    V0, lo(CORE_800CE198)(AT)
 jal   0x800F8D6C
- li    A0, 24
+ li    A0, __PP64_INTERNAL_VAL_AUDIO_INDEX
 jal   InitCameras
  li    A0, 2
 jal   setup_routine
@@ -2484,11 +2560,6 @@ JAL hydrate_events
 lui   A0, hi(shared_happening_event)
 jal   0x800F8D48
 addiu A0, A0, lo(shared_happening_event)
-
-; Sets up necessary per turn events
-lui   A0, hi(D_8011E4D8_event_table)
-jal   EventTableHydrate
-addiu A0, A0, lo(D_8011E4D8_event_table)
 
 jal   0x800FF41C
  move  A0, R0
@@ -2652,7 +2723,7 @@ jal   EndProcess
        NOP
 sw    R0, 0(S1)
 L8010822C:
-slti  V0, S0, 8
+slti  V0, S0, STAR_COUNT
 bnez  V0, L80108210
  sll   V0, S0, 2
 lw    RA, 0x1c(SP)
@@ -7791,7 +7862,7 @@ jal   GetAbsSpaceIndexFromChainSpaceIndex
 move  S2, V0
 sll   V0, S2, 0x10
 sra   S0, V0, 0x10
-li    V0, ${booEventSpaces[0]}
+li    V0, ${primaryBooEventSpace}
 beq   S0, V0, L8010DFB4
  li    T0, -1
 sw    T0, 0x94(SP)
@@ -12041,7 +12112,7 @@ jal   EndProcess
        NOP
 sw    R0, 0(S1)
 L80111E88:
-slti  V0, S0, 8
+slti  V0, S0, STAR_COUNT
 bnez  V0, L80111E6C
  sll   V0, S0, 2
 lb    V0, 5(S7)
@@ -17116,7 +17187,7 @@ jr    RA
 
 ; runs from 0xFFFB event table entry
 ; Poison / Bowser Curse, reduce movement to 3 spaces.
-func_80116BA0:
+__PP64_INTERNAL_CURSE_POISON_DICEROLL_EVENT:
 addiu SP, SP, -0x38
 sw    RA, 0x1c(SP)
 sw    S2, 0x18(SP)
@@ -17741,7 +17812,7 @@ jr    RA
 
 ; Runs from 0xFFFB event table entry
 ; Reversal (mushroom, curse)
-func_801174D4:
+__PP64_INTERNAL_REVERSAL_DICEROLL_EVENT:
 addiu SP, SP, -0x38
 sw    RA, 0x1c(SP)
 sw    S2, 0x18(SP)
@@ -18240,7 +18311,7 @@ sra   V0, V0, 0x10
 lb    V1, 0xf(S3)
 bne   V0, V1, L80117C30
        NOP
-jal   func_801174D4
+jal   __PP64_INTERNAL_REVERSAL_DICEROLL_EVENT
        NOP
 L80117C30:
 lw    RA, 0x38(SP)
@@ -18721,8 +18792,8 @@ jal   setup_routine
        NOP
 jal   0x800FF41C
  li    A0, 2
-lui   A0, hi(func_801065D0)
-addiu A0, A0, lo(func_801065D0)
+lui   A0, hi(${show_next_star_fn})
+addiu A0, A0, lo(${show_next_star_fn})
 li    A1, 4101
 li    A2, 4096
 jal   InitProcess
@@ -19626,42 +19697,42 @@ overlaycalls:
 .word 0x00040000, overlaycall4
 .word 0xFFFF0000, 0x00000000
 
-D_8011D280:
-.halfword 0001 0002 0003 0000 0004 0005 0006 0007
+.align 4
+shuffle_order:
+.halfword ${shuffleData.order.join(",")}
 
-D_8011D290:
-.halfword 0000 0000 0000 0001 0001 0001 0001 0002
+.align 4
+shuffle_bias:
+.halfword ${shuffleData.bias.join(",")}
 
+.align 4
 D_8011D2A0:
 .halfword 0x6 0x7 0x8 0x9 0xA 0xB 0xC 0xD
 
+.align 4
 star_space_indices:
-.halfword ${starIndices.join(",")}
+.halfword ${starIndices.join(",") || 0}
 
+.align 4
 ; toad spaces
 D_8011D2C0:
-.halfword ${toadIndices.join(",")}
+.halfword ${toadIndices.join(",") || 0}
 
+.align 4
 ; dir/file of various tumble face textures
 D_8011D2D0:
 tumble_face_tex_grin:
 .halfword 0xA 0x7E
-D_8011D2D4:
 tumble_face_tex_frown:
 .halfword 0xA 0x7F
-D_8011D2D8:
 tumble_face_tex_sad:
 .halfword 0xA 0x80
-D_8011D2DC:
 tumble_face_tex_smile:
 .halfword 0xA 0x81
-D_8011D2E0:
 tumble_face_tex_despair:
 .halfword 0xA 0x82
-D_8011D2E4:
 tumble_face_tex_gasp:
 .halfword 0xA 0x83
-D_8011D2E8:
 tumble_face_tex_beaming:
 .halfword 0xA 0x84
 
@@ -19694,11 +19765,12 @@ D_8011D318:
 D_8011D31C:
 .word 0xFFFF0000
 
+.align 4
 ; star spaces 2
 D_8011D320:
 .halfword ${starIndices.join(",")} 0xFFFF
-.align 4
 
+.align 4
 ; interleaving array?
 D_8011D334: .halfword 0x7
 D_8011D336: .halfword 0xFFFF
@@ -19737,22 +19809,24 @@ gate_exit_spaces:
 .halfword ${gateEventInfos[1].gateEntryIndex}
 .halfword ${gateEventInfos[1].gateExitIndex}
 
+.align 4
 ; toad spaces 2
 D_8011D37C:
-.halfword ${toadIndices.join(",")}
-.align 4
+.halfword ${toadIndices.join(",") || 0}
 
+.align 4
 D_8011D38C:
 .halfword 0x06 0x07 0x08 0x09 0x0A 0x0B 0x0C 0x0D
 
+.align 4
 boo_space_indices:
 .halfword ${booIndex}
-.align 4
 
+.align 4
 bank_coin_space_indices:
 .halfword ${bankCoinSpaces.join(",")}
-.align 4
 
+.align 4
 ; bank coin coordinates?
 D_8011D3A4: .word 0xC0400000
 D_8011D3A8: .word 0x00000000
@@ -19787,9 +19861,11 @@ D_8011D410: .word 0x42340000
 D_8011D414: .word 0x00000000
 D_8011D418: .word 0x42340000
 
+.align 4
 gate_spaces:
 .halfword ${gateEventInfos.map(info => info.gateSpaceIndex).join(",")}
 
+.align 16
 ; indices into a list of main fs models
 ; for the gate graphics. Don't change.
 D_8011D420: .byte 0x00
@@ -19863,14 +19939,15 @@ D_8011D4F8: .word 0xFFFFFFFF
 D_8011D4FC: .word 0xFFFFFFFF
 D_8011D500: .word 0xFFFFFFFF
 
+.align 4
 bank_model_space_indices:
 .halfword ${bankSpaces.join(",")}
-.align 4
 
+.align 4
 item_shop_model_space_indices:
 .halfword ${itemShopSpaces.join(",")}
-.align 4
 
+.align 4
 ; Koopa Kard usage AI
 D_8011E058:
 .word 0x04000000 0x00F50014 0x0B541E1E
@@ -20131,15 +20208,7 @@ D_8011E4B9: .byte 0xDE
 D_8011E4BA: .byte 0x35 0xF7
 D_8011E4BC: .byte 0x1A 0x42 0x00 0x00
 
-; codes that run with the 0xFFFB activation type below
-D_8011E4C0:
-.word 0x00070001 func_80116BA0
-.word 0x00070001 func_801174D4 0 0
-
-D_8011E4D8_event_table:
-.word 0xFFFB0000 D_8011E4C0
-.word 0xFFFF0000 00000000
-
+.align 16
 data_screen_dimensions:
 .word 00000000
 .word 00000000
@@ -20698,6 +20767,7 @@ percent_d_str_format:
 .asciiz "%d" ; 0x25640000
 .align 4
 
+.align 8
 D_8011F8D8: .word 0x3FF80000
 D_8011F8DC: .word 0x00000000
 
@@ -20726,26 +20796,35 @@ D_8011F934: .word 0x3F800000
 D_8011F938: .word 0xBF800000
 D_8011F93C: .word 0x3F800000
 
+.align 8
 D_8011F940: .word 0x3FD33333
 D_8011F944: .word 0x33333333
 
+.align 8
 D_8011F948: .word 0x3FE00000
 D_8011F94C: .word 0x00000000
+
+.align 8
 D_8011F950: .word 0x3FE00000
 D_8011F954: .word 0x00000000
 
+.align 8
 D_8011F958: .word 0x3FE00000
 D_8011F95C: .word 0x00000000
 
+.align 8
 D_8011F960: .word 0x3FE00000
 D_8011F964: .word 0x00000000
 
+.align 8
 D_8011F968: .word 0x3FF80000
 D_8011F96C: .word 0x00000000
 
+.align 8
 D_8011F970: .word 0x3FE99999
 D_8011F974: .word 0x9999999A
 
+.align 8
 D_8011F978: .word 0x3FE99999
 D_8011F97C: .word 0x9999999A
 
@@ -20790,6 +20869,7 @@ D_8011FA78:
 .word 0
 .word 0
 
+; holds millenium star object pointers?
 D_8011FA98:
 .word 0
 .word 0
@@ -20800,6 +20880,7 @@ D_8011FA98:
 .word 0
 .word 0
 
+.align 8
 D_8011FAB8: .word 0
 
 D_8011FABC: .word 0

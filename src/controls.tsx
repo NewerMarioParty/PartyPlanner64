@@ -61,14 +61,21 @@ export const ToggleButton = class ToggleButton extends React.Component<IToggleBu
   }
 };
 
-export interface IToggleGroupProps {
-  onToggleClick: (id: string | number, pressed: boolean) => any;
+interface IToggleItem<Tid> {
+  id: Tid;
+  selected: boolean;
+  title?: string;
+  text: string;
+}
+
+export interface IToggleGroupProps<Tid = number | string> {
+  onToggleClick: (id: Tid, pressed: boolean) => any;
   groupCssClass?: string;
-  items: { id: string | number, selected: boolean, title?: string, text: string }[];
+  items: IToggleItem<Tid>[];
   allowDeselect?: boolean;
 }
 
-export const ToggleGroup = class ToggleGroup extends React.Component<IToggleGroupProps> {
+export class ToggleGroup<Tid extends number | string> extends React.Component<IToggleGroupProps<Tid>> {
   state = {}
 
   render() {

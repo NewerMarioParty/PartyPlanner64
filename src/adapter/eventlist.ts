@@ -1,4 +1,5 @@
 import { EventActivationType, EventExecutionType } from "../types";
+import { createEventInstanceLabel } from "../events/prepAsm";
 
 /** Listing of events for a space. */
 export class SpaceEventList {
@@ -13,9 +14,9 @@ export class SpaceEventList {
   /*
   * Populates this SpaceEventTable from an event table existing in the buffer.
   */
-  parse(arr: DataView): void
-  parse(arr: ArrayBuffer, offset: number): void;
-  parse(arr: ArrayBuffer | DataView, offset?: number): void {
+  public parse(arr: DataView): void
+  public parse(arr: ArrayBuffer, offset: number): void;
+  public parse(arr: ArrayBuffer | DataView, offset?: number): void {
     let dataView: DataView;
     if (arr instanceof ArrayBuffer)
       dataView = new DataView(arr, offset);
@@ -35,10 +36,13 @@ export class SpaceEventList {
   * Writes the current entries back to the buffer at an offset.
   * Returns length of bytes written (equal to calling byteLength())
   */
-  write(buffer: ArrayBuffer, offset: number) {
+ public write(buffer: ArrayBuffer, offset: number) {
     let dataView = new DataView(buffer, offset);
     let currentOffset = 0;
     this.forEach(entry => {
+      if (typeof entry.address === "string") {
+        throw new Error("Cannot write event list with symbolic address");
+      }
       this._writeEntry(dataView, currentOffset, entry.activationType, entry.executionType, entry.address);
       currentOffset += 8;
     });
@@ -49,12 +53,16 @@ export class SpaceEventList {
   }
 
   /** Creates the assembly representation of the event list. */
-  getAssembly(): string {
-    let asm = `__PP64_INTERNAL_SPACE_LIST_${this._spaceIndex}:\n`;
+  public getAssembly(): string {
+    let asm = `${createSpaceEventListLabel(this._spaceIndex!)}:\n`;
     this.forEach((entry, index) => {
-      asm +=
-      `.halfword ${entry.activationType}, ${entry.executionType}
-       .word __PP64_INTERNAL_EVENT_${this._spaceIndex!}_${index}\n`;
+      asm += `.halfword ${entry.activationType}, ${entry.executionType}\n`;
+      if (typeof entry.address === "string") {
+        asm += `.word ${entry.address}\n`; // A symbol, write verbatim.
+      }
+      else {
+        asm += `.word ${createEventInstanceLabel(this._spaceIndex!, index)}\n`;
+      }
     });
     asm += `.word 0, 0\n`;
     return asm;
@@ -71,26 +79,30 @@ export class SpaceEventList {
     dataView.setUint32(currentOffset + 4, address);
   }
 
-  add(activationType: EventActivationType,
-    executionType: EventExecutionType, address: number = 0)
+  public add(activationType: EventActivationType,
+    executionType: EventExecutionType, address: number | string = 0)
   {
     this._entries.push(new SpaceEventListEntry(activationType, executionType, address));
   }
 
-  setAddress(entryIndex: number, address: number = 0) {
+  public setAddress(entryIndex: number, address: number = 0) {
     this._entries[entryIndex].address = address >>> 0;
   }
 
-  forEach(fn: (entry: SpaceEventListEntry, index?: number) => any) {
+  public forEach(fn: (entry: SpaceEventListEntry, index: number) => any) {
     this._entries.forEach(fn);
   }
 
-  byteLength() {
+  public count(): number {
+    return this._entries.length;
+  }
+
+  public byteLength() {
     // Each entry is 8 bytes, plus the last null entry.
     return (this._entries.length * 8) + 8;
   }
 
-  static byteLength(entryCount: number) {
+  public static byteLength(entryCount: number) {
     return (entryCount * 8) + 8;
   }
 }
@@ -98,13 +110,18 @@ export class SpaceEventList {
 export class SpaceEventListEntry {
   public activationType: EventActivationType;
   public executionType: EventExecutionType;
-  public address: number;
+  public address: number | string;
 
   constructor(activationType: EventActivationType,
-    executionType: EventExecutionType, address: number)
+    executionType: EventExecutionType, address: number | string)
   {
     this.activationType = activationType;
     this.executionType = executionType;
     this.address = address;
   }
+}
+
+export function createSpaceEventListLabel(spaceIndex: number): string {
+  const strIndex = spaceIndex < 0 ? ("minus" + Math.abs(spaceIndex)) : spaceIndex;
+  return `__PP64_INTERNAL_SPACE_LIST_${strIndex}`;
 }

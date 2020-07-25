@@ -16,14 +16,17 @@
   height: 100%;
 }
 
+$codeMirrorBackground: #f3ece8;
+$codeMirrorReadonlyBackground: #d1ccc9;
+
 .eventcodemirror {
-  border: 1px solid rgb(51, 43, 39);
+  // border: 1px solid rgb(51, 43, 39);
   border-radius: 3px;
   overflow: hidden;
 
   .CodeMirror {
     height: 100%;
-    background-color: #f3ece8;
+    background-color: $codeMirrorBackground;
     font-family: Consolas, monospace;
     font-size: 12pt;
   }
@@ -34,6 +37,12 @@
 
   .cm-keyword.cm-nop {
     opacity: 0.6; // Fade out NOPs
+  }
+}
+
+.eventcodemirror.CodeMirror-readonly {
+  .CodeMirror {
+    background-color: $codeMirrorReadonlyBackground;
   }
 }
 
@@ -145,5 +154,61 @@
     margin-top: 1em;
     padding: 0;
     width: 610px;
+  }
+}
+
+.createEventDropdownContainer {
+  min-width: 140px;
+}
+
+.createEventTabStrip {
+  width: 640px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.createEventTabStripContent {
+  flex: 1;
+  min-height: 0;
+}
+
+@media (max-width: 965px) {
+  .createEventTabStrip {
+    height: 545px;
+  }
+}
+
+.createEventTabStripTabs {
+  height: 40px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: row;
+  padding: 0 0.5em;
+}
+
+.createEventTabStripTab {
+  border: 1px solid black;
+  border-bottom: none;
+  border-top-left-radius: 3px;
+  border-top-right-radius: 3px;
+  background-color: #B59C95;
+  padding: 0 0.5em;
+  padding-top: 0.55em;
+  margin: 0 0.15em;
+  min-width: 120px;
+  text-align: center;
+  cursor: pointer;
+
+  &:hover {
+    background-color: #D0B6AF;
+  }
+
+  &.activeTab {
+    font-weight: bold;
+    background-color: $codeMirrorBackground;
+    cursor: default;
+    border-top-width: 3px;
+    padding-top: 0.45em;
   }
 }

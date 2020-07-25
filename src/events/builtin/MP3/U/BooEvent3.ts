@@ -1,6 +1,6 @@
 import { IEvent, IEventParseInfo, IEventWriteInfo } from "../../../events";
 import { getFunctionLength } from "../../../../utils/MIPS";
-import { ISpaceEvent } from "../../../../boards";
+import { IEventInstance } from "../../../../boards";
 
 export const BooEvent3: Partial<IEvent> = {
   parse(dataView: DataView, info: IEventParseInfo) {
@@ -24,7 +24,7 @@ export const BooEvent3: Partial<IEvent> = {
 
     return true;
   },
-  write(dataView: DataView, event: ISpaceEvent, info: IEventWriteInfo, temp: any) {
+  write(dataView: DataView, event: IEventInstance, info: IEventWriteInfo, temp: any) {
     // Code still lives in the board overlay.
     return `
       J __PP64_INTERNAL_BOO_SPACE_EVENT

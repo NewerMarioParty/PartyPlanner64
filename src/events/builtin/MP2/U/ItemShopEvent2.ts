@@ -1,5 +1,5 @@
 import { IEvent, IEventParseInfo, IEventWriteInfo } from "../../../events";
-import { ISpaceEvent, getSpacesOfSubType } from "../../../../boards";
+import { IEventInstance, getSpacesOfSubType, getDeadSpace } from "../../../../boards";
 import { distance } from "../../../../utils/number";
 import { scenes } from "../../../../fs/scenes";
 import { SpaceSubtype } from "../../../../types";
@@ -24,13 +24,13 @@ export const ItemShopEvent2: Partial<IEvent> = {
 
     return true;
   },
-  write(dataView: DataView, event: ISpaceEvent, info: IEventWriteInfo, temp: any) {
+  write(dataView: DataView, event: IEventInstance, info: IEventWriteInfo, temp: any) {
     let curItemShop = temp.curItemShop = temp.curItemShop || 1;
     temp.curItemShop++;
 
     // Find the closest Item shop subtype space nearby.
     let itemShopSpaces = getSpacesOfSubType(SpaceSubtype.ITEMSHOP, info.board);
-    let eventSpace = info.curSpace;
+    let eventSpace = info.curSpace || getDeadSpace(info.board);
     let bestDistance = Number.MAX_VALUE;
     let bestItemShopIdx = info.curSpaceIndex;
     for (let b = 0; b < itemShopSpaces.length; b++) {
@@ -52,7 +52,7 @@ export const ItemShopEvent2: Partial<IEvent> = {
       }
 
       // Just point to the event because we left it alone.
-      return [0x0029EE00, 0];
+      return [0x0029EE00, 0, 0];
     }
 
     throw new Error("Can't write Item Shop to board index " + info.boardIndex);

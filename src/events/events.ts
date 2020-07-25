@@ -1,7 +1,7 @@
-import { EventActivationType, Game, EventExecutionType, EventParameterType } from "../types";
+import { Game, EventExecutionType, EventParameterType, EventCodeLanguage, EditorEventActivationType } from "../types";
 import { makeDivisibleBy } from "../utils/number";
 import { copyObject } from "../utils/obj";
-import { IBoard, getCurrentBoard, ISpace, ISpaceEvent, getBoardEventAsm } from "../boards";
+import { IBoard, getCurrentBoard, ISpace, IEventInstance, getBoardEvent } from "../boards";
 import { romhandler } from "../romhandler";
 import { ICustomEvent, writeCustomEvent, createCustomEvent } from "./customevents";
 import { getEventFromLibrary, getEventsInLibrary } from "./EventLibrary";
@@ -10,13 +10,14 @@ export interface IEvent {
   readonly id: string;
   readonly name: string;
   readonly parse?: (dataView: DataView, info: IEventParseInfo) => boolean;
-  readonly write?: (dataView: DataView, event: ISpaceEvent, info: IEventWriteInfo, temp: any) => number[] | string | false;
-  readonly activationType: EventActivationType;
+  readonly write?: (dataView: DataView, event: IEventInstance, info: IEventWriteInfo, temp: any) => [number, number, number] | string | false;
+  readonly activationType: EditorEventActivationType;
   readonly executionType: EventExecutionType;
   readonly fakeEvent?: boolean;
   readonly supportedGames: Game[];
   readonly parameters?: IEventParameter[];
   readonly custom?: boolean;
+  readonly language?: EventCodeLanguage;
 }
 
 /** Parameter provided to an event. */
@@ -55,14 +56,15 @@ function _supportedGamesMatch(supportedGames: Game[], gameVersion: number) {
 
 /** Gets an event, either from the board's set or the global library. */
 export function getEvent(eventId: string, board: IBoard): IEvent {
-  if (board && board.events && board.events[eventId]) {
-    return createCustomEvent(board.events[eventId]);
+  if (board && board.events && !!getBoardEvent(board, eventId)) {
+    const boardEvent = getBoardEvent(board, eventId);
+    return createCustomEvent(boardEvent!.language, boardEvent!.code);
   }
   return getEventFromLibrary(eventId);
 }
 
-/** Creates a space event (the object stored in the board json for a given event) */
-export function createSpaceEvent(event: IEvent, args?: Partial<ISpaceEvent>): ISpaceEvent {
+/** Creates an event instance (the object stored in the board json for a given event) */
+export function createEventInstance(event: IEvent, args?: Partial<IEventInstance>): IEventInstance {
   const spaceEvent = Object.assign({
     id: event.id,
     activationType: event.activationType,
@@ -137,7 +139,7 @@ export interface IEventWriteInfo {
   boardIndex: number;
   board: IBoard;
   curSpaceIndex: number;
-  curSpace: ISpace;
+  curSpace: ISpace | null;
   chains: number[][];
   offset?: number;
   addr?: number;
@@ -151,7 +153,7 @@ function _getArgsSize(count: number) {
   return makeDivisibleBy(count * 2, 4);
 }
 
-export function write(buffer: ArrayBuffer, event: ISpaceEvent, info: IEventWriteInfo, temp: any) {
+export async function write(buffer: ArrayBuffer, event: IEventInstance, info: IEventWriteInfo, temp: any) {
   // Write any inline arguments.
   // Normally, these are right by the event list, but it makes more sense
   // to write them mixed in right beside the ASM that actually uses them...
@@ -178,10 +180,10 @@ export function write(buffer: ArrayBuffer, event: ISpaceEvent, info: IEventWrite
 
   let result;
   if (event.custom) {
-    const asm = getBoardEventAsm(info.board, event.id)!;
-    if (!asm)
+    const boardEvent = getBoardEvent(info.board, event.id)!;
+    if (!boardEvent)
       throw new Error(`A space had the ${event.id} custom event, but its code wasn't in the board file`);
-    result = writeCustomEvent(asmView, event, info, asm, temp);
+    result = await writeCustomEvent(asmView, event, info, boardEvent.language, boardEvent.code, temp);
   }
   else {
     result = getEventFromLibrary(event.id).write!(asmView, event, info, temp);

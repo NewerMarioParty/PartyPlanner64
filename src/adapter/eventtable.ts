@@ -1,3 +1,5 @@
+import { createSpaceEventListLabel } from "./eventlist";
+
 export class SpaceEventTable {
   private _entries: { [spaceIndex: number]: number | string };
 
@@ -18,7 +20,7 @@ export class SpaceEventTable {
       dataView = arr;
     let currentOffset = 0;
     let spaceIndex, address;
-    while ((spaceIndex = dataView.getUint16(currentOffset)) !== 0xFFFF) {
+    while ((spaceIndex = dataView.getInt16(currentOffset)) !== -1) {
       address = dataView.getUint32(currentOffset + 4);
       this.add(spaceIndex, address);
       currentOffset += 8;
@@ -48,7 +50,7 @@ export class SpaceEventTable {
     for (let spaceIndex in this._entries) {
       asm +=
       `.halfword ${parseInt(spaceIndex)}, 0
-       .word __PP64_INTERNAL_SPACE_LIST_${spaceIndex}\n`;
+       .word ${createSpaceEventListLabel(parseInt(spaceIndex))}\n`;
     }
     asm += `.halfword 0xFFFF, 0, 0, 0\n`;
     return asm;

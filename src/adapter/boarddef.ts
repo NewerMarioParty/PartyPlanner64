@@ -229,8 +229,7 @@ export function determineChains(board: IBoard) {
         return;
       }
 
-      // Hit a dead end. The validation should catch this, so if it didn't,
-      // presumably it was disabled. Just warn but keep going.
+      // Hit a dead end. Just warn but keep going.
       if (typeof nextSpaceIdx !== "number") {
         console.warn(`determineChains.parseChain hit a dead end at ${$$hex(curSpaceIdx)} (${curSpaceIdx})`);
         chains.push(chain);
@@ -309,9 +308,8 @@ export function determineChains(board: IBoard) {
     if (!spaces[s] || spaces[s]._seen)
       continue;
 
-    // Needs to have a connection; otherwise it is some decorative single space.
-    if (hasConnection(s, "*", board))
-      parseChain(s);
+    // Handle all others, even single decorative spaces.
+    parseChain(s);
   }
 
   $$log("chains: ", chains);

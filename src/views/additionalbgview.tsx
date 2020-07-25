@@ -1,13 +1,10 @@
 import * as React from "react";
 import { CodeMirrorWrapper } from "../components/codemirrorwrapper";
+import { ToggleGroup } from "../controls";
 import { showMessage, confirmFromUser } from "../appControl";
-import { IBoard } from "../boards";
-import { prepAdditionalBgAsm } from "../events/prepAdditionalBgAsm";
-import { prepGenericAsm } from "../events/prepAsm";
-import { Game, getGameName } from "../types";
-import { assemble } from "mips-assembler";
-import { $$log } from "../utils/debug";
-import { defaultAdditionalBgAsm, makeFakeBgSyms } from "../events/additionalbg";
+import { IBoard, getAdditionalBackgroundCode, setAdditionalBackgroundCode } from "../boards";
+import { Game, EventCodeLanguage } from "../types";
+import { defaultAdditionalBgAsm, makeFakeBgSyms, defaultAdditionalBgC, testAdditionalBgCode } from "../events/additionalbg";
 
 import "../css/additionalbg.scss";
 
@@ -18,34 +15,55 @@ interface IAdditionalBgViewProps {
 }
 
 interface IAdditionalBgViewState {
-  asm: string;
+  code: string;
+  language: EventCodeLanguage;
 }
 
 export class AdditionalBgView extends React.Component<IAdditionalBgViewProps, IAdditionalBgViewState> {
   constructor(props: IAdditionalBgViewProps) {
     super(props);
 
-    const currentCode = this.props.board.additionalbgcode;
+    const currentCode = getAdditionalBackgroundCode(this.props.board);
     if (currentCode) {
       this.state = {
-        asm: currentCode,
+        code: currentCode.code,
+        language: currentCode.language
       };
     }
     else {
       this.state = {
-        asm: defaultAdditionalBgAsm,
+        code: defaultAdditionalBgC,
+        language: EventCodeLanguage.C,
       };
     }
   }
 
   render() {
+    const languageToggles = [
+      { id: EventCodeLanguage.C, text: "C", selected: this.state.language === EventCodeLanguage.C },
+      { id: EventCodeLanguage.MIPS, text: "MIPS", selected: this.state.language === EventCodeLanguage.MIPS },
+    ];
+
+    const codeMirrorMode = this.state.language === EventCodeLanguage.C ? "c" : "mips-pp64";
+
     return (
       <div className="additionalBgViewContainer">
         <h2>Additional Background Configuration</h2>
-        <CodeMirrorWrapper
-          className="eventcodemirror additionalbgcodemirror"
-          value={this.state.asm}
-          onChange={this.onAsmChange} />
+        <div className="editorSettingsSplit">
+          <div>
+            <CodeMirrorWrapper
+              key={codeMirrorMode}
+              mode={codeMirrorMode}
+              className="eventcodemirror additionalbgcodemirror"
+              value={this.state.code}
+              onChange={this.onCodeChange} />
+          </div>
+          <div className="createEventForm">
+            <label>Language:</label>
+            <ToggleGroup items={languageToggles}
+              onToggleClick={this.onLanguageToggleClicked} />
+          </div>
+        </div>
       </div>
     );
   }
@@ -58,65 +76,87 @@ export class AdditionalBgView extends React.Component<IAdditionalBgViewProps, IA
     _viewInstance = null;
   }
 
-  onAsmChange = (asm: string) => {
-    this.setState({ asm });
+  onCodeChange = (code: string) => {
+    this.setState({ code });
   }
 
-  getAsm = () => {
-    return this.state.asm;
+  onLanguageToggleClicked = async (language: EventCodeLanguage) => {
+    if (!this.codeHasChanged({ fromDefaultOnly: true }) || await confirmFromUser("Are you sure you want to switch languages? The current code will not be kept.")) {
+      this.setState({
+        language,
+        code: getDefaultCodeForLanguage(language)
+      });
+    }
   }
 
-  getBoard = () => {
-    return this.props.board;
-  }
+  getCode = () => this.state.code;
+
+  getLanguage = () => this.state.language;
+
+  getBoard = () => this.props.board;
 
   promptExit = async () => {
-    const asm = this.state.asm;
-    const oldAsm = this.props.board.additionalbgcode;
-    if (oldAsm !== asm || (!oldAsm && asm === defaultAdditionalBgAsm)) {
+    if (this.codeHasChanged()) {
       return await confirmFromUser("Are you sure you want to exit without saving your code?");
     }
     return true;
   }
+
+  private codeHasChanged(opts?: { fromDefaultOnly?: boolean }): boolean {
+    const code = this.state.code;
+    const oldCode = getAdditionalBackgroundCode(this.props.board);
+
+    const differentFromOldCode = oldCode && oldCode.code !== code;
+    let differentFromDefaultCode = code !== getDefaultCodeForLanguage(this.state.language);
+    if (differentFromDefaultCode && (!opts || !opts.fromDefaultOnly)) {
+      differentFromDefaultCode = !oldCode;
+    }
+    return differentFromOldCode || differentFromDefaultCode;
+  }
 }
 
-export function saveAdditionalBgCode() {
-  const asm = _viewInstance!.getAsm();
+function getDefaultCodeForLanguage(language: EventCodeLanguage): string {
+  switch (language) {
+    case EventCodeLanguage.C:
+      return defaultAdditionalBgC;
+
+    case EventCodeLanguage.MIPS:
+      return defaultAdditionalBgAsm;
+  }
+
+  throw new Error(`Unrecognized event code language ${language}`);
+}
+
+export async function saveAdditionalBgCode() {
+  let code = _viewInstance!.getCode();
+  const language = _viewInstance!.getLanguage();
   const board =  _viewInstance!.getBoard();
 
-  if (!asm) {
-    showMessage("Assembly code must be provided.");
+  if (!code) {
+    showMessage("No code was provided, any existing code will be removed.");
+    setAdditionalBackgroundCode(board, "", language);
     return;
   }
 
-  const asmWithBgSyms = prepAdditionalBgAsm(asm, 0, makeFakeBgSyms(board));
+  const bgIndices = makeFakeBgSyms(board);
+  const possibleGameVersions = getGameVersionsToTestCompile(board);
 
   let failures: string[] = [];
-  const possibleGameVersions = getGameVersionsToTestCompile(board);
-  possibleGameVersions.forEach(game => {
-    try {
-      const preppedAsm = prepGenericAsm(asmWithBgSyms, 0x80000000, game);
-      $$log(preppedAsm);
-      assemble(preppedAsm);
-    }
-    catch (e) {
-      failures.push(`Failed test assembly for ${getGameName(game)}:
-${e.toString()}
-`);
-    }
-  });
+
+  for (const game of possibleGameVersions) {
+    failures = failures.concat(await testAdditionalBgCode(code, language, bgIndices, game));
+  }
 
   if (failures.length === possibleGameVersions.length) {
-    showMessage(`All possible target game versions failed to assemble.\n${failures.join("\n")}`);
+    showMessage(`One or more possible target game versions failed to compile/assemble.\n${failures.join("\n")}`);
     return;
   }
 
-  if (asm === defaultAdditionalBgAsm) {
-    delete board.additionalbgcode;
+  if (code === getDefaultCodeForLanguage(language)) {
+    code = "";
   }
-  else {
-    board.additionalbgcode = asm;
-  }
+
+  setAdditionalBackgroundCode(board, code, language);
 }
 
 export function additionalBgViewPromptExit(): Promise<boolean> {

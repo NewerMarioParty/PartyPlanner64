@@ -19,7 +19,9 @@
     ]
   },
   "mac": {
-    "category": "public.app-category.utilities"
+    "category": "public.app-category.utilities",
+    "target": [
+      { "target": "zip", "arch": "x64" }
+    ]
   }
 }
-

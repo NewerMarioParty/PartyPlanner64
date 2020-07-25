@@ -1,11 +1,13 @@
 .additionalBgViewContainer {
   margin: 0 auto;
-  margin-top: 1em;
   max-width: 775px;
-  height: calc(100% - 40px);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 
   h2 {
     color: white;
+    flex-shrink: 0;
   }
 }
 
@@ -15,5 +17,22 @@
 
   .CodeMirror {
     height: 100%;
+  }
+}
+
+.editorSettingsSplit {
+  flex: 1 1;
+  height: 100%;
+  display: flex;
+  flex-direction: row;
+}
+
+@media (max-width: 965px) {
+  .editorSettingsSplit {
+    flex-direction: column;
+
+    > div:first-child {
+      height: 500px;
+    }
   }
 }

@@ -3,11 +3,13 @@ import { IBoard } from "../boards";
 
 const _rules = Object.create(null);
 
+type ValidationReturnType = false | string;
+
 export interface IValidationRule {
   id: string;
   name: string;
   level: ValidationLevel;
-  fails(board: IBoard, args?: any): false | string;
+  fails(board: IBoard, args?: any): ValidationReturnType | Promise<ValidationReturnType>;
 }
 
 const ValidationRuleBase: IValidationRule = {

@@ -1,6 +1,6 @@
 import { IEvent, IEventParseInfo, IEventWriteInfo } from "../../../events";
 import { hashEqual } from "../../../../utils/arrays";
-import { ISpaceEvent } from "../../../../boards";
+import { IEventInstance } from "../../../../boards";
 
 export const BankEvent3: Partial<IEvent> = {
   parse(dataView: DataView, info: IEventParseInfo) {
@@ -14,7 +14,7 @@ export const BankEvent3: Partial<IEvent> = {
     }
     return false;
   },
-  write(dataView: DataView, event: ISpaceEvent, info: IEventWriteInfo, temp: any) {
+  write(dataView: DataView, event: IEventInstance, info: IEventWriteInfo, temp: any) {
     // Code still lives in the overlay itself.
     return `
       J __PP64_INTERNAL_BANK_SPACE_EVENT

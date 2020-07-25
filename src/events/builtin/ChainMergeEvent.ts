@@ -1,7 +1,7 @@
 import { IEvent, IEventWriteInfo, IEventParseInfo } from "../events";
-import { EventActivationType, EventExecutionType, Game, EventParameterType } from "../../types";
+import { EventExecutionType, Game, EventParameterType, EditorEventActivationType } from "../../types";
 import { hashEqual, copyRange } from "../../utils/arrays";
-import { addConnection, ISpaceEvent } from "../../boards";
+import { addConnection, IEventInstance } from "../../boards";
 import { prepAsm } from "../prepAsm";
 import { assemble } from "mips-assembler";
 import { addEventToLibrary } from "../EventLibrary";
@@ -11,7 +11,7 @@ import { addEventToLibrary } from "../EventLibrary";
 export const ChainMerge: IEvent = {
   id: "CHAINMERGE",
   name: "",
-  activationType: EventActivationType.WALKOVER,
+  activationType: EditorEventActivationType.WALKOVER,
   executionType: EventExecutionType.DIRECT,
   parameters: [
     { name: "prevSpace", type: EventParameterType.Number, },
@@ -80,7 +80,7 @@ export const ChainMerge: IEvent = {
   },
 
   // TODO: We can do a O(1) + n/2 style improvement for this event.
-  write(dataView: DataView, event: ISpaceEvent, info: IEventWriteInfo, temp: any) {
+  write(dataView: DataView, event: IEventInstance, info: IEventWriteInfo, temp: any) {
     const asm = `
       ADDIU SP, SP, -0x18
       SW    RA, 0x10(SP)
@@ -98,7 +98,7 @@ export const ChainMerge: IEvent = {
     }
     const bytes = assemble(prepAsm(asm, ChainMerge, event, info)) as ArrayBuffer;
     copyRange(dataView, bytes, 0, 0, bytes.byteLength);
-    return [info.offset!, bytes.byteLength];
+    return [info.offset!, bytes.byteLength, 0];
   }
 };
 addEventToLibrary(ChainMerge);

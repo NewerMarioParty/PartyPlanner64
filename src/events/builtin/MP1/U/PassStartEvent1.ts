@@ -1,13 +1,13 @@
 import { hashEqual } from "../../../../utils/arrays";
 import { IEventParseInfo, IEvent, IEventWriteInfo } from "../../../events";
-import { EventActivationType, EventExecutionType, Game } from "../../../../types";
-import { ISpaceEvent } from "../../../../boards";
+import { EditorEventActivationType, EventExecutionType, Game } from "../../../../types";
+import { IEventInstance } from "../../../../boards";
 import { addEventToLibrary } from "../../../EventLibrary";
 
 export const PassStart: IEvent = {
   id: "PASSSTART",
   name: "Pass start",
-  activationType: EventActivationType.WALKOVER,
+  activationType: EditorEventActivationType.WALKOVER,
   executionType: EventExecutionType.PROCESS,
   supportedGames: [
     Game.MP1_USA,
@@ -26,7 +26,7 @@ export const PassStart: IEvent = {
 
     return false;
   },
-  write(dataView: DataView, event: ISpaceEvent, info: IEventWriteInfo, temp: any) {
+  write(dataView: DataView, event: IEventInstance, info: IEventWriteInfo, temp: any) {
     return `
       addiu SP, SP, -0x18
       sw    RA, 0x10(SP)
@@ -56,7 +56,7 @@ export const PassStart: IEvent = {
       lhu   V0, 0(S0)
       addiu V0, V0, 1
       sh    V0, 0(S0)
-      jal   IsBoardFeatureDisabled
+      jal   IsBoardFeatureFlagSet
       addiu A0, R0, 66
       bne   V0, R0, L800F965C
       lui   V1, 0x6666
@@ -76,19 +76,19 @@ export const PassStart: IEvent = {
       sll   A0, A0, 0x10
       beq   A0, R0, L800F9624
       NOP
-      jal   IsBoardFeatureDisabled
+      jal   IsBoardFeatureFlagSet
       addiu A0, R0, 77
       bne   V0, R0, L800F965C
       NOP
     L800F9624:
-      jal   IsBoardFeatureDisabled
+      jal   IsBoardFeatureFlagSet
       addiu A0, R0, 77
       beq   V0, R0, L800F963C
       addiu A0, R0, -1
       jal   0x80058910
       addiu A1, R0, 1
     L800F963C:
-      jal   SetBoardFeatureEnabled
+      jal   SetBoardFeatureFlag
       addiu A0, R0, 77
       addiu A0, R0, 95
       addu  A1, R0, R0
@@ -120,7 +120,7 @@ export const PassStart: IEvent = {
       addiu A1, R0, -1
       jal   0x80052BE8
       addiu A2, R0, 2
-      jal   IsBoardFeatureDisabled
+      jal   IsBoardFeatureFlagSet
       addiu A0, R0, 66
       bnel  V0, R0, L800F94F0
       addiu A0, R0, 65

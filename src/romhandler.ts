@@ -208,12 +208,15 @@ export const romhandler = new class RomHandler {
     switch(gameID) {
       case Game.MP1_USA:
       case Game.MP1_JPN:
+      case Game.MP1_PAL:
         this._gameVersion = 1;
         return 1;
       case Game.MP2_USA:
+      case Game.MP2_JPN:
         this._gameVersion = 2;
         return 2;
       case Game.MP3_USA:
+      case Game.MP3_JPN:
         this._gameVersion = 3;
         return 3;
     }

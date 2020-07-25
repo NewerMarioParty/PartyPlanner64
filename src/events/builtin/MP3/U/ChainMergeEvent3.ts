@@ -1,7 +1,7 @@
 import { IEvent, IEventWriteInfo, IEventParseInfo } from "../../../events";
-import { EventActivationType, EventExecutionType, Game, EventParameterType } from "../../../../types";
+import { EditorEventActivationType, EventExecutionType, Game, EventParameterType } from "../../../../types";
 import { hashEqual } from "../../../../utils/arrays";
-import { addConnection, ISpaceEvent } from "../../../../boards";
+import { addConnection, IEventInstance } from "../../../../boards";
 import { addEventToLibrary } from "../../../EventLibrary";
 
 // Represents the "event" that takes the player from one chain to another.
@@ -9,7 +9,7 @@ import { addEventToLibrary } from "../../../EventLibrary";
 export const ChainMerge3: IEvent = {
   id: "CHAINMERGE3",
   name: "",
-  activationType: EventActivationType.WALKOVER,
+  activationType: EditorEventActivationType.WALKOVER,
   executionType: EventExecutionType.DIRECT,
   parameters: [
     { name: "prevSpace", type: EventParameterType.Number, },
@@ -62,21 +62,21 @@ export const ChainMerge3: IEvent = {
     }
     return false;
   },
-  write(dataView: DataView, event: ISpaceEvent, info: IEventWriteInfo, temp: any) {
+  write(dataView: DataView, event: IEventInstance, info: IEventWriteInfo, temp: any) {
     // TODO: Could just use "prevSpace" etc below, the definelabels should work...
     return `
       ADDIU SP, SP, -0x18
       SW    RA, 0x10(SP)
-      ADDIU A0, R0, ${event.parameterValues!.prevSpace}
+      ADDIU A0, R0, ${event.parameterValues!.prevSpace || 0}
       ADDIU A1, R0, ${event.parameterValues!.chain || 0}
-      JAL   func_80108C1C
+      JAL   chainmerge_3_helper
       ADDIU A2, R0, ${event.parameterValues!.spaceIndex || 0}
       LW    RA, 0x10(SP)
       JR    RA
       ADDIU SP, SP, 0x18
 
   .beginstatic
-    func_80108C1C:
+    chainmerge_3_helper:
       addiu SP, SP, -0x20
       sw    RA, 0x1c(SP)
       sw    S2, 0x18(SP)
@@ -98,14 +98,14 @@ export const ChainMerge3: IEvent = {
         andi  A1, A1, 0xffff
       sll   V0, V0, 0x10
       sra   V0, V0, 0x10
-      bne   V0, S0, func_80108C1C_exit
+      bne   V0, S0, chainmerge_3_helper_exit
         sll   A1, S1, 0x10
       sll   A2, S2, 0x10
       li    A0, -1
       sra   A1, A1, 0x10
       jal   SetNextChainAndSpace
         sra   A2, A2, 0x10
-      func_80108C1C_exit:
+      chainmerge_3_helper_exit:
       lw    RA, 0x1c(SP)
       lw    S2, 0x18(SP)
       lw    S1, 0x14(SP)

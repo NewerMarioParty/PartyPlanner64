@@ -1,5 +1,5 @@
 import { IEvent, IEventParseInfo, IEventWriteInfo } from "../../../events";
-import { ISpaceEvent } from "../../../../boards";
+import { IEventInstance } from "../../../../boards";
 
 export const ItemShopEvent3: Partial<IEvent> = {
   parse(dataView: DataView, info: IEventParseInfo) {
@@ -22,7 +22,7 @@ export const ItemShopEvent3: Partial<IEvent> = {
 
     return true;
   },
-  write(dataView: DataView, event: ISpaceEvent, info: IEventWriteInfo, temp: any) {
+  write(dataView: DataView, event: IEventInstance, info: IEventWriteInfo, temp: any) {
     // Most of the event remains in the overlay.
     return `
       J __PP64_INTERNAL_ITEM_SHOP_EVENT

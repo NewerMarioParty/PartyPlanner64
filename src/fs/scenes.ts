@@ -1,7 +1,8 @@
 import { copyRange } from "../utils/arrays";
 import { romhandler } from "../romhandler";
-import { getROMAdapter } from "../adapter/adapters";
 import { $$log, $$hex } from "../utils/debug";
+import { getSymbol } from "../symbols/symbols";
+import { ramToROM } from "../utils/offsets";
 
 export interface ISceneInfo {
   rom_start: number;
@@ -77,14 +78,16 @@ export const scenes = new class Scenes {
   }
 
   extract() {
-    const adapter = getROMAdapter();
-    const sceneTableOffset = adapter && adapter.SCENE_TABLE_ROM;
-    if (!sceneTableOffset) {
-      throw new Error("SCENE_TABLE_ROM undefined in current ROM adapter");
-    }
-
     this._overlays = [];
     this._sceneInfo = [];
+
+    let sceneTableOffset = getSymbol(romhandler.getROMGame()!, "overlay_table");
+    if (!sceneTableOffset) {
+      $$log("overlay_table symbol undefined for current ROM");
+      return;
+    }
+    sceneTableOffset = ramToROM(sceneTableOffset);
+
     const romBuffer = romhandler.getROMBuffer()!;
     const romView = romhandler.getDataView();
     let curOffset = sceneTableOffset;
@@ -109,11 +112,11 @@ export const scenes = new class Scenes {
   }
 
   public pack(buffer: ArrayBuffer, offset: number = 0): void {
-    const adapter = getROMAdapter();
-    const sceneTableOffset = adapter && adapter.SCENE_TABLE_ROM;
+    let sceneTableOffset = getSymbol(romhandler.getROMGame()!, "overlay_table");
     if (!sceneTableOffset) {
-      throw new Error("SCENE_TABLE_ROM undefined in current ROM adapter");
+      throw new Error("overlay_table symbol undefined for current ROM");
     }
+    sceneTableOffset = ramToROM(sceneTableOffset);
 
     const romView = new DataView(buffer);
     let curOffset = sceneTableOffset;

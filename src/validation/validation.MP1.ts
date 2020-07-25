@@ -8,7 +8,8 @@ const commonRules = [
   getRule("TOOMANYBOOS", { limit: 2 }),
   getRule("TOOMANYBOWSERS", { limit: 1 }),
   getRule("TOOMANYKOOPAS", { limit: 1 }),
-  getRule("BADSTARCOUNT", { low: 7, high: 7 }),
+  getRule("BADSTARCOUNT", { low: 0, high: 7, disallowed: { 1: true } }),
+  getRule("WARNNOSTARSPACES"),
 ];
 
 export function getValidationRules(gameID: Game) {

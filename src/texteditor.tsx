@@ -97,13 +97,15 @@ export class MPEditor extends React.Component<IMPEditorProps, IMPEditorState> {
     };
   }
 
-  componentWillReceiveProps = (nextProps: IMPEditorProps) => {
-    const oldValue = MPEditorStringAdapter.editorStateToString(this.state.editorState, {
-      theme: this.state.theme,
-    });
-    if (oldValue !== nextProps.value) {
-      const newEditorState = MPEditorStringAdapter.stringToEditorState(nextProps.value!);
-      this.setState({ editorState: newEditorState });
+  componentDidUpdate() {
+    if ((this.props.displayMode || MPEditorDisplayMode.Edit) !== MPEditorDisplayMode.Edit) {
+      const oldValue = MPEditorStringAdapter.editorStateToString(this.state.editorState, {
+        theme: this.state.theme,
+      });
+      if (oldValue !== this.props.value) {
+        const newEditorState = MPEditorStringAdapter.stringToEditorState(this.props.value!);
+        this.setState({ editorState: newEditorState });
+      }
     }
   }
 

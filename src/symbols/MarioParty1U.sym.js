@@ -273,6 +273,11 @@ export default [{
       name: "PlayerIsCurrent",
       desc: "A0=player_index tests if A0 is the current player" },
 {
+      addr: 2147822312, // 0x80052AE8
+      type: "code",
+      name: "PlayerStructIsCurrent",
+      desc: "A0=struct player pointer" },
+{
       addr: 2147822368, // 0x80052B20
       type: "code",
       name: "PlayerIsCPU",
@@ -305,17 +310,16 @@ export default [{
 {
       addr: 2147850136, // 0x80059798
       type: "code",
-      name: "IsBoardFeatureDisabled",
-      desc: "A0=0xD:bowser" },
+      name: "IsBoardFeatureFlagSet" },
 {
       addr: 2147850204, // 0x800597DC
       type: "code",
-      name: "SetBoardFeatureEnabled",
+      name: "SetBoardFeatureFlag",
       desc: "A0=feature" },
 {
       addr: 2147850284, // 0x8005982C
       type: "code",
-      name: "SetBoardFeatureDisabled",
+      name: "ClearBoardFeatureFlag",
       desc: "A0=feature" },
 {
       addr: 2147850368, // 0x80059880
@@ -1861,7 +1865,7 @@ export default [{
 {
       addr: 2148277364, // 0x800C1C74
       type: "data",
-      name: "dma_table" },
+      name: "overlay_table" },
 {
       addr: 2148282356, // 0x800C2FF4
       type: "data",
@@ -1942,6 +1946,11 @@ export default [{
       addr: 2148454728, // 0x800ED148
       type: "u16",
       name: "enabled_feature_flags" },
+{
+      addr: 2148454802, // 0x800ED192
+      type: "u16",
+      name: "times_passed_start",
+      desc: "Number of times the start space has been passed" },
 {
       addr: 2148455760, // 0x800ED550
       type: "u16",

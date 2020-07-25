@@ -1,5 +1,5 @@
 import { IEvent, IEventParseInfo, IEventWriteInfo } from "../../../events";
-import { ISpaceEvent, getSpacesOfSubType } from "../../../../boards";
+import { IEventInstance, getSpacesOfSubType, getDeadSpace } from "../../../../boards";
 import { SpaceSubtype } from "../../../../types";
 import { distance } from "../../../../utils/number";
 import { scenes } from "../../../../fs/scenes";
@@ -24,13 +24,13 @@ export const BooEvent2: Partial<IEvent> = {
 
     return true;
   },
-  write(dataView: DataView, event: ISpaceEvent, info: IEventWriteInfo, temp: any) {
+  write(dataView: DataView, event: IEventInstance, info: IEventWriteInfo, temp: any) {
     let curBoo = temp.curBoo = temp.curBoo || 1;
     temp.curBoo++;
 
     // Find the closest (probably only) boo space nearby.
     let booSpaces = getSpacesOfSubType(SpaceSubtype.BOO, info.board);
-    let eventSpace = info.curSpace;
+    let eventSpace = info.curSpace || getDeadSpace(info.board);
     let bestDistance = Number.MAX_VALUE;
     let bestBooIdx = info.curSpaceIndex;
     for (let b = 0; b < booSpaces.length; b++) {
@@ -57,7 +57,7 @@ export const BooEvent2: Partial<IEvent> = {
       }
 
       // Just point to the event because we left it there.
-      return [0x002A0D18, 0];
+      return [0x002A0D18, 0, 0];
     }
 
     throw new Error("Can't write Boo to board index " + info.boardIndex);

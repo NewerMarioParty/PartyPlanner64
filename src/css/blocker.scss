@@ -27,6 +27,8 @@
   margin-top: 50px;
   width: 80%;
   text-align: center;
+  overflow: auto;
+  max-height: 45%;
 }
 
 .loadingMsgTxt, .loadingMsgTxt a {

@@ -1559,6 +1559,10 @@ export default [{
       name: "midpoint",
       desc: "A0=output_xyz" },
 {
+      addr: 2148098804, // 0x800962F4
+      type: "data",
+      name: "overlay_table" },
+{
       addr: 2148103760, // 0x80097650
       type: "u32",
       name: "rng_seed" },
@@ -1690,10 +1694,74 @@ export default [{
       type: "u8",
       name: "current_turn" },
 {
+      addr: 2148323420, // 0x800CD05C
+      type: "u8",
+      name: "current_game_length",
+      desc: "00=Lite Play" },
+{
+      addr: 2148323421, // 0x800CD05D
+      type: "u8",
+      name: "current_star_spawn",
+      desc: "00 for first star spawn" },
+{
+      addr: 2148323422, // 0x800CD05E
+      type: "u8",
+      name: "star_spawn_indices",
+      desc: "array length 8 of the current star order" },
+{
       addr: 2148323431, // 0x800CD067
       type: "u8",
       name: "current_player_index",
       desc: "Player who's turn is active" },
+{
+      addr: 2148323433, // 0x800CD069
+      type: "u8",
+      name: "current_space_index" },
+{
+      addr: 2148323488, // 0x800CD0A0
+      type: "u8",
+      name: "board_ram9",
+      desc: "free for board use" },
+{
+      addr: 2148323489, // 0x800CD0A1
+      type: "u8",
+      name: "board_ram10",
+      desc: "free for board use" },
+{
+      addr: 2148323490, // 0x800CD0A2
+      type: "u8",
+      name: "board_ram11",
+      desc: "free for board use" },
+{
+      addr: 2148323491, // 0x800CD0A3
+      type: "u8",
+      name: "board_ram12",
+      desc: "free for board use" },
+{
+      addr: 2148323492, // 0x800CD0A4
+      type: "u8",
+      name: "board_ram13",
+      desc: "free for board use" },
+{
+      addr: 2148323493, // 0x800CD0A5
+      type: "u8",
+      name: "board_ram14",
+      desc: "free for board use" },
+{
+      addr: 2148323494, // 0x800CD0A6
+      type: "u8",
+      name: "board_ram15",
+      desc: "free for board use" },
+{
+      addr: 2148323495, // 0x800CD0A7
+      type: "u8",
+      name: "board_ram16",
+      desc: "free for board use" },
+{
+      addr: 2148323496, // 0x800CD0A8
+      type: "u8",
+      name: "board_ram17",
+      desc: "free for board use" },
 {
       addr: 2148323497, // 0x800CD0A9
       type: "u8",
@@ -1799,6 +1867,11 @@ export default [{
       type: "u8",
       name: "p1_bowser_suit_flag",
       desc: "1 = suit is on" },
+{
+      addr: 2148340004, // 0x800D1124
+      type: "u8",
+      name: "p1_turn_color_status",
+      desc: "00=blank" },
 {
       addr: 2148340016, // 0x800D1130
       type: "u16",
@@ -1921,6 +1994,11 @@ export default [{
       name: "p2_bowser_suit_flag",
       desc: "1 = suit is on" },
 {
+      addr: 2148340060, // 0x800D115C
+      type: "u8",
+      name: "p2_turn_color_status",
+      desc: "00=blank" },
+{
       addr: 2148340072, // 0x800D1168
       type: "u16",
       name: "p2_minigame_star" },
@@ -2041,6 +2119,11 @@ export default [{
       type: "u8",
       name: "p3_bowser_suit_flag",
       desc: "1 = suit is on" },
+{
+      addr: 2148340116, // 0x800D1194
+      type: "u8",
+      name: "p3_turn_color_status",
+      desc: "00=blank" },
 {
       addr: 2148340128, // 0x800D11A0
       type: "u16",
@@ -2163,6 +2246,11 @@ export default [{
       name: "p4_bowser_suit_flag",
       desc: "1 = suit is on" },
 {
+      addr: 2148340172, // 0x800D11CC
+      type: "u8",
+      name: "p4_turn_color_status",
+      desc: "00=blank" },
+{
       addr: 2148340184, // 0x800D11D8
       type: "u16",
       name: "p4_minigame_star" },
@@ -2265,6 +2353,11 @@ export default [{
       name: "GetChainSpaceIndexFromAbsSpaceIndex",
       desc: "A0=abs_space_index" },
 {
+      addr: 2148446796, // 0x800EB24C
+      type: "code",
+      name: "SetPlayerOntoAbsSpaceIndex",
+      desc: "A0=abs_space_index" },
+{
       addr: 2148448240, // 0x800EB7F0
       type: "code",
       name: "SetSpaceType",
@@ -2283,6 +2376,16 @@ export default [{
       addr: 2148449480, // 0x800EBCC8
       type: "code",
       name: "GetCurrentSpaceIndex" },
+{
+      addr: 2148452040, // 0x800EC6C8
+      type: "code",
+      name: "CloseMessage",
+      desc: "Closes open message window (with animation)" },
+{
+      addr: 2148452588, // 0x800EC8EC
+      type: "code",
+      name: "ShowMessage",
+      desc: "A0=character_index" },
 {
       addr: 2148453208, // 0x800ECB58
       type: "code",
@@ -2318,6 +2421,11 @@ export default [{
       type: "code",
       name: "GetTurnsElapsed" },
 {
+      addr: 2148454924, // 0x800ED20C
+      type: "code",
+      name: "RotatePlayerModel",
+      desc: "A0=player_index" },
+{
       addr: 2148456732, // 0x800ED91C
       type: "code",
       name: "SetPlayerOntoChain",
@@ -2332,6 +2440,10 @@ export default [{
       type: "code",
       name: "SetPrevChainAndSpace",
       desc: "A0=player_index" },
+{
+      addr: 2148457048, // 0x800EDA58
+      type: "code",
+      name: "ChangeStarLocation" },
 {
       addr: 2148460992, // 0x800EE9C0
       type: "code",
@@ -2381,6 +2493,59 @@ export default [{
       type: "code",
       name: "RefreshHUD",
       desc: "A0=player_index" },
+{
+      addr: 2148535712, // 0x80100DA0
+      type: "data",
+      name: "mini_ids_4p" },
+{
+      addr: 2148535732, // 0x80100DB4
+      type: "data",
+      name: "mini_ids_4p_easy" },
+{
+      addr: 2148535744, // 0x80100DC0
+      type: "data",
+      name: "mini_ids_1v3" },
+{
+      addr: 2148535756, // 0x80100DCC
+      type: "data",
+      name: "mini_ids_1v3_easy" },
+{
+      addr: 2148535764, // 0x80100DD4
+      type: "data",
+      name: "mini_ids_2v2" },
+{
+      addr: 2148535776, // 0x80100DE0
+      type: "data",
+      name: "mini_ids_2v2_easy" },
+{
+      addr: 2148535784, // 0x80100DE8
+      type: "data",
+      name: "mini_ids_battle" },
+{
+      addr: 2148535792, // 0x80100DF0
+      type: "data",
+      name: "mini_ids_battle_easy" },
+{
+      addr: 2148535796, // 0x80100DF4
+      type: "data",
+      name: "mini_ids_item" },
+{
+      addr: 2148535804, // 0x80100DFC
+      type: "data",
+      name: "mini_ids_item_easy" },
+{
+      addr: 2148535816, // 0x80100E08
+      type: "data",
+      name: "mini_ids_duel" },
+{
+      addr: 2148535824, // 0x80100E10
+      type: "data",
+      name: "mini_ids_duel_easy" },
+{
+      addr: 2148535832, // 0x80100E18
+      type: "data",
+      name: "num_minis_in_roulette",
+      desc: "Number of Mini-Games to populate the roulette with for each type (4p" },
 {
       addr: 2148553232, // 0x80105210
       type: "u16",

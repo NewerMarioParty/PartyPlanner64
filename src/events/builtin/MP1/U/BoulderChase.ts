@@ -1,12 +1,12 @@
 import { IEvent, IEventParseInfo } from "../../../events";
-import { EventActivationType, EventExecutionType, Game } from "../../../../types";
+import { EditorEventActivationType, EventExecutionType, Game } from "../../../../types";
 import { hashEqual } from "../../../../utils/arrays";
 import { addEventToLibrary } from "../../../EventLibrary";
 
 export const BoulderChase: IEvent = {
   id: "BOULDERCHASE",
   name: "Boulder chase",
-  activationType: EventActivationType.LANDON,
+  activationType: EditorEventActivationType.LANDON,
   executionType: EventExecutionType.DIRECT,
   fakeEvent: true,
   supportedGames: [

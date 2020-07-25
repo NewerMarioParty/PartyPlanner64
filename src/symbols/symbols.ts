@@ -1,19 +1,23 @@
 import { Game } from "../types";
 
 import MarioParty1U from "./MarioParty1U.sym";
+import MarioParty1J from "./MarioParty1J.sym";
+import MarioParty1E from "./MarioParty1E.sym";
 import MarioParty2U from "./MarioParty2U.sym";
+import MarioParty2J from "./MarioParty2J.sym";
 import MarioParty3U from "./MarioParty3U.sym";
+import MarioParty3J from "./MarioParty3J.sym";
 
 function _getSymbolsForGame(game: Game): ISymbol[] {
   switch (game) {
     case Game.MP1_USA: return MarioParty1U;
-    case Game.MP1_JPN: throw new Error("Symbols not available for game type " + game);
-    case Game.MP1_PAL: throw new Error("Symbols not available for game type " + game);
+    case Game.MP1_JPN: return MarioParty1J;
+    case Game.MP1_PAL: return MarioParty1E;
     case Game.MP2_USA: return MarioParty2U;
-    case Game.MP2_JPN: throw new Error("Symbols not available for game type " + game);
+    case Game.MP2_JPN: return MarioParty2J;
     case Game.MP2_PAL: throw new Error("Symbols not available for game type " + game);
     case Game.MP3_USA: return MarioParty3U;
-    case Game.MP3_JPN: throw new Error("Symbols not available for game type " + game);
+    case Game.MP3_JPN: return MarioParty3J;
     case Game.MP3_PAL: throw new Error("Symbols not available for game type " + game);
   }
 

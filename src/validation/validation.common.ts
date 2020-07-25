@@ -1,13 +1,10 @@
-import { IBoard, getConnections, getSpacesOfSubType, getStartSpaceIndex, getDeadEnds, getBoardEventAsm } from "../boards";
+import { IBoard, getConnections, getSpacesOfSubType, getStartSpaceIndex, getDeadEnds, getBoardEvent, getAdditionalBackgroundCode, IEventInstance } from "../boards";
 import { ValidationLevel, SpaceSubtype, Space } from "../types";
 import { romhandler } from "../romhandler";
 import { CustomAsmHelper } from "../events/customevents";
 import { getEvent, isUnsupported, IEventParameter } from "../events/events";
 import { createRule } from "./validationrules";
-import { prepAdditionalBgAsm } from "../events/prepAdditionalBgAsm";
-import { makeFakeBgSyms } from "../events/additionalbg";
-import { assemble } from "mips-assembler";
-import { prepGenericAsm } from "../events/prepAsm";
+import { makeFakeBgSyms, testAdditionalBgCode } from "../events/additionalbg";
 
 const HasStart = createRule("HASSTART", "Has start space", ValidationLevel.ERROR);
 HasStart.fails = function(board: IBoard, args: any) {
@@ -77,18 +74,47 @@ _makeTooManyOfSubtypeRule(SpaceSubtype.BANK, "Banks");
 _makeTooManyOfSubtypeRule(SpaceSubtype.ITEMSHOP, "Item Shops");
 _makeTooManyOfSubtypeRule(SpaceSubtype.GATE, "Gates");
 
-const BadStarCount = createRule("BADSTARCOUNT", "Bad star count", ValidationLevel.ERROR);
-BadStarCount.fails = function(board: IBoard, args: any = {}) {
-  let low = args.low || 1;
-  let high = args.high || 1;
-  let count = board.spaces.filter(space => {
+function _getStarSpaceCount(board: IBoard): number {
+  return board.spaces.filter(space => {
     return space && space.star;
   }).length;
+}
+
+interface IBadStarCountProps {
+  low: number;
+  high: number;
+  disallowed?: { [count: number]: boolean };
+}
+
+const BadStarCount = createRule("BADSTARCOUNT", "Bad star count", ValidationLevel.ERROR);
+BadStarCount.fails = function(board: IBoard, args: IBadStarCountProps) {
+  const count = _getStarSpaceCount(board);
+
+  const disallowed = args.disallowed || {};
+  if (disallowed[count]) {
+    if (count === 1)
+      return `There cannot be exactly 1 star space.`;
+    else
+      return `There cannot be exactly ${count} star spaces.`;
+  }
+
+  const low = args.low || 0;
+  const high = args.high || 0;
+
   if (count < low || count > high) {
     if (low !== high)
       return `There are ${count} stars, but the range is ${low}-${high} for this board.`;
     else
       return `There are ${count} stars, but the count must be ${low} for this board.`;
+  }
+  return false;
+};
+
+const WarnNoStarSpaces = createRule("WARNNOSTARSPACES", "No star spaces", ValidationLevel.WARNING);
+WarnNoStarSpaces.fails = function(board: IBoard, args: any = {}) {
+  const count = _getStarSpaceCount(board);
+  if (count === 0) {
+    return `There are no star spaces, this may be unintentional.`;
   }
   return false;
 };
@@ -194,32 +220,44 @@ UnsupportedEvents.fails = function(board: IBoard, args: any) {
 };
 
 const FailingCustomEvents = createRule("CUSTOMEVENTFAIL", "Custom event errors", ValidationLevel.ERROR);
-FailingCustomEvents.fails = function(board: IBoard, args: any) {
+FailingCustomEvents.fails = async function(board: IBoard, args: any) {
   let failingEvents = Object.create(null);
   let gameID = romhandler.getROMGame()!;
-  board.spaces.forEach(space => {
-    if (!space || !space.events)
-      return;
-    space.events.forEach(event => {
-      if (!event)
-        return; // Let the other rule handle this.
-      if (!event.custom)
-        return;
 
-      try {
-        const customEvent = getEvent(event.id, board);
-        const asm = getBoardEventAsm(board, event.id)!;
-        CustomAsmHelper.testAssemble(asm, customEvent.parameters, {
-          game: gameID,
-        });
-      }
-      catch (e) {
-        console.error(e.toString());
-        if (!failingEvents[event.id])
-          failingEvents[event.id] = true;
-      }
-    });
-  });
+  async function testEvent(event: IEventInstance): Promise<void> {
+    try {
+      const customEvent = getEvent(event.id, board);
+      const boardEvent = getBoardEvent(board, event.id)!;
+      await CustomAsmHelper.testCustomEvent(boardEvent.language, boardEvent.code, customEvent.parameters, {
+        game: gameID,
+      });
+    }
+    catch (e) {
+      console.error(e.toString());
+      if (!failingEvents[event.id])
+        failingEvents[event.id] = true;
+    }
+  }
+
+  for (const space of board.spaces) {
+    if (!space || !space.events)
+      continue;
+    for (const event of space.events) {
+      if (!event)
+        continue; // Let the other rule handle this.
+      if (!event.custom)
+        continue;
+      await testEvent(event);
+    }
+  }
+
+  if (board.boardevents) {
+    for (const event of board.boardevents) {
+      if (!event.custom)
+        continue;
+      await testEvent(event);
+    }
+  }
 
   let ids = [];
   for (var id in failingEvents) {
@@ -239,6 +277,21 @@ FailingCustomEvents.fails = function(board: IBoard, args: any) {
 const BadCustomEventParameters = createRule("CUSTOMEVENTBADPARAMS", "Custom event parameter issues", ValidationLevel.ERROR);
 BadCustomEventParameters.fails = function(board: IBoard, args: any) {
   const missingParams = Object.create(null);
+
+  function testParameters(event: IEventInstance): void {
+    const customEvent = getEvent(event.id, board);
+    const parameters = customEvent.parameters;
+    if (parameters && parameters.length) {
+      parameters.forEach((parameter: IEventParameter) => {
+        if (!event.parameterValues || !event.parameterValues.hasOwnProperty(parameter.name)) {
+          if (!missingParams[parameter.name])
+            missingParams[parameter.name] = 0;
+          missingParams[parameter.name]++;
+        }
+      });
+    }
+  }
+
   board.spaces.forEach(space => {
     if (!space || !space.events)
       return;
@@ -247,20 +300,17 @@ BadCustomEventParameters.fails = function(board: IBoard, args: any) {
         return; // Let the other rule handle this.
       if (!event.custom)
         return;
-
-      const customEvent = getEvent(event.id, board);
-      const parameters = customEvent.parameters;
-      if (parameters && parameters.length) {
-        parameters.forEach((parameter: IEventParameter) => {
-          if (!event.parameterValues || !event.parameterValues.hasOwnProperty(parameter.name)) {
-            if (!missingParams[parameter.name])
-              missingParams[parameter.name] = 0;
-            missingParams[parameter.name]++;
-          }
-        });
-      }
+      testParameters(event);
     });
   });
+
+  if (board.boardevents) {
+    for (const event of board.boardevents) {
+      if (!event.custom)
+        continue;
+      testParameters(event);
+    }
+  }
 
   let errorLines = [];
   for (let id in missingParams) {
@@ -401,20 +451,19 @@ GateSetup.fails = function(board: IBoard, args: any = {}) {
 };
 
 const AdditionalBackgroundCodeIssue = createRule("ADDITIONALBGCODEISSUE", "Additional background code issue", ValidationLevel.ERROR);
-AdditionalBackgroundCodeIssue.fails = function(board: IBoard, args: any = {}) {
-  if (!board.additionalbgcode) {
+AdditionalBackgroundCodeIssue.fails = async function(board: IBoard, args: any = {}) {
+  const bgCode = getAdditionalBackgroundCode(board);
+  if (!bgCode) {
     return false;
   }
 
-  const asmWithBgSyms = prepAdditionalBgAsm(board.additionalbgcode, 0, makeFakeBgSyms(board));
+  const bgIndices = makeFakeBgSyms(board);
   const game = romhandler.getROMGame()!;
-  const preppedAsm = prepGenericAsm(asmWithBgSyms, 0x80000000, game);
-  try {
-    assemble(preppedAsm);
-  }
-  catch (e) {
-    console.error(e);
-    return `The additional background code failed a test assembly.`;
+  const failures = await testAdditionalBgCode(bgCode.code, bgCode.language, bgIndices, game);
+
+  if (failures.length) {
+    console.error(failures);
+    return "The additional background code failed a test assembly.";
   }
 
   return false;

@@ -96,6 +96,8 @@ _audioOffsets[Game.MP1_USA] = [ // Length 0x7B3DF0
 
 _audioOffsets[Game.MP1_JPN] = [ // Length ?
 ];
+_audioOffsets[Game.MP1_PAL] = [ // Length ?
+];
 
 _audioOffsets[Game.MP2_USA] = [ // Length 0x6DAB50
   // 0x1750450
@@ -166,7 +168,10 @@ _audioOffsets[Game.MP3_USA] = [ // Length 0x67be40
 
 export const audio = {
   getROMOffset(subsection = 0) {
-    let patchInfo = this.getPatchInfo()[subsection];
+    const infos = this.getPatchInfo();
+    if (!infos)
+      return null;
+    let patchInfo = infos[subsection];
     if (!patchInfo)
       return null;
     let romPatchInfo = patchInfo.offsets[0];

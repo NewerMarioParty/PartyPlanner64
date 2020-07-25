@@ -1,7 +1,7 @@
 import { IEventParseInfo, IEventWriteInfo, IEvent } from "../../../events";
-import { EventActivationType, EventExecutionType, Game } from "../../../../types";
+import { EventExecutionType, Game, EditorEventActivationType } from "../../../../types";
 import { hashEqual } from "../../../../utils/arrays";
-import { ISpaceEvent } from "../../../../boards";
+import { IEventInstance } from "../../../../boards";
 import { addEventToLibrary } from "../../../EventLibrary";
 
 // When going in reverse, there can be splits where there otherwise was only
@@ -11,7 +11,7 @@ export const ReverseChainSplit: IEvent = {
   id: "REVERSECHAINSPLIT",
   name: "",
   fakeEvent: true,
-  activationType: EventActivationType.WALKOVER,
+  activationType: EditorEventActivationType.WALKOVER,
   executionType: EventExecutionType.DIRECT, // Notable difference
   supportedGames: [
     Game.MP3_USA,
@@ -26,7 +26,7 @@ export const ReverseChainSplit: IEvent = {
 
     return true;
   },
-  write(dataView: DataView, event: ISpaceEvent, info: IEventWriteInfo, temp: any) {
+  write(dataView: DataView, event: IEventInstance, info: IEventWriteInfo, temp: any) {
     // It's all in ChainSplit3.
     throw new Error(`${ReverseChainSplit.id} not implemented`);
   }

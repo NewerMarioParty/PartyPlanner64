@@ -24,6 +24,11 @@ export default [{
       name: "osMemSize",
       desc: "Size of RDRAM" },
 {
+      addr: 2147568404, // 0x80014B14
+      type: "code",
+      name: "PlaySound",
+      desc: "A0=sound_index" },
+{
       addr: 2147579520, // 0x80017680
       type: "code",
       name: "ReadMainFS",
@@ -78,6 +83,56 @@ export default [{
       name: "ShowPlayerCoinChange",
       desc: "A0=player_index" },
 {
+      addr: 2147800736, // 0x8004D6A0
+      type: "code",
+      name: "UseMushroom",
+      desc: "Mushroom item function" },
+{
+      addr: 2147800884, // 0x8004D734
+      type: "code",
+      name: "UseSkeleton_key",
+      desc: "Skeleton Key item function" },
+{
+      addr: 2147800920, // 0x8004D758
+      type: "code",
+      name: "UsePlunder_chest",
+      desc: "Plunder Chest item function" },
+{
+      addr: 2147800960, // 0x8004D780
+      type: "code",
+      name: "UseBowserBomb",
+      desc: "Bowser Bomb item function" },
+{
+      addr: 2147800992, // 0x8004D7A0
+      type: "code",
+      name: "UseDuelingGlove",
+      desc: "Dueling Glove item function" },
+{
+      addr: 2147801176, // 0x8004D858
+      type: "code",
+      name: "UseWarpBlock",
+      desc: "Warp Block item function" },
+{
+      addr: 2147801264, // 0x8004D8B0
+      type: "code",
+      name: "UseGoldenMushroom",
+      desc: "Golden Mushroom item function" },
+{
+      addr: 2147801412, // 0x8004D944
+      type: "code",
+      name: "UseBooBell",
+      desc: "Boo Bell item function" },
+{
+      addr: 2147801644, // 0x8004DA2C
+      type: "code",
+      name: "UseBowserSuit",
+      desc: "Bowser Suit item function" },
+{
+      addr: 2147801796, // 0x8004DAC4
+      type: "code",
+      name: "UseMagicLamp",
+      desc: "Magic Lamp item function" },
+{
       addr: 2147828328, // 0x80054268
       type: "code",
       name: "AddArrowAngle",
@@ -88,10 +143,35 @@ export default [{
       name: "GetSpaceData",
       desc: "A0=space_index" },
 {
+      addr: 2147830704, // 0x80054BB0
+      type: "code",
+      name: "GetAbsSpaceIndexFromChainSpaceIndex",
+      desc: "A0=chain_index" },
+{
       addr: 2147833484, // 0x8005568C
       type: "code",
       name: "EventTableHydrate",
       desc: "Moves event table data into the space data" },
+{
+      addr: 2147836228, // 0x80056144
+      type: "code",
+      name: "CloseMessage",
+      desc: "Closes open message window (with animation)" },
+{
+      addr: 2147836776, // 0x80056368
+      type: "code",
+      name: "ShowMessage",
+      desc: "A0=character_index" },
+{
+      addr: 2147839024, // 0x80056C30
+      type: "code",
+      name: "RotateCharacterModel",
+      desc: "A0=player_index (-1 for cur)" },
+{
+      addr: 2147840736, // 0x800572E0
+      type: "code",
+      name: "SetPlayerOntoChain",
+      desc: "A0=player_index" },
 {
       addr: 2147840844, // 0x8005734C
       type: "code",
@@ -126,6 +206,11 @@ export default [{
       name: "PlayerHasCoins",
       desc: "A0=player_index" },
 {
+      addr: 2147868008, // 0x8005DD68
+      type: "code",
+      name: "SetBoardPlayerAnimation",
+      desc: "A0=player_index" },
+{
       addr: 2147882164, // 0x800614B4
       type: "code",
       name: "AdjustPlayerCoinsGradual",
@@ -154,6 +239,11 @@ export default [{
       type: "code",
       name: "InitProcess" },
 {
+      addr: 2147981148, // 0x8007975C
+      type: "code",
+      name: "PlayCharacterSound",
+      desc: "A0=sound_index" },
+{
       addr: 2147998176, // 0x8007D9E0
       type: "code",
       name: "SleepProcess" },
@@ -161,6 +251,16 @@ export default [{
       addr: 2147998276, // 0x8007DA44
       type: "code",
       name: "SleepVProcess" },
+{
+      addr: 2148070724, // 0x8008F544
+      type: "code",
+      name: "InitFadeIn",
+      desc: "A0=fade_type" },
+{
+      addr: 2148070828, // 0x8008F5AC
+      type: "code",
+      name: "InitFadeOut",
+      desc: "A0=fade_type" },
 {
       addr: 2148397008, // 0x800DEFD0
       type: "data",
@@ -1724,6 +1824,15 @@ export default [{
       type: "code",
       name: "__umoddi3" },
 {
+      addr: 2148305012, // 0x800C8874
+      type: "data",
+      name: "overlay_table" },
+{
+      addr: 2148319248, // 0x800CC010
+      type: "data",
+      name: "item_function_pointers",
+      desc: "u32[10]" },
+{
       addr: 2148397008, // 0x800DEFD0
       type: "data",
       name: "perm_heap_addr",
@@ -1759,10 +1868,23 @@ export default [{
       type: "u32",
       name: "num_arrow_angles" },
 {
+      addr: 2148504494, // 0x800F93AE
+      type: "u16",
+      name: "total_turns" },
+{
+      addr: 2148504496, // 0x800F93B0
+      type: "u16",
+      name: "current_turn" },
+{
       addr: 2148509246, // 0x800FA63E
       type: "u16",
       name: "scene",
       desc: "Current scene number" },
+{
+      addr: 2148520644, // 0x800FD2C4
+      type: "u8",
+      name: "p1_char",
+      desc: "00=Mario" },
 {
       addr: 2148520648, // 0x800FD2C8
       type: "u16",
@@ -1804,6 +1926,11 @@ export default [{
       name: "p1_turn_status",
       desc: "Player 1 turn status" },
 {
+      addr: 2148520696, // 0x800FD2F8
+      type: "u8",
+      name: "p2_char",
+      desc: "00=Mario" },
+{
       addr: 2148520700, // 0x800FD2FC
       type: "u16",
       name: "p2_coins",
@@ -1844,6 +1971,11 @@ export default [{
       name: "p2_turn_status",
       desc: "Player 2 turn status" },
 {
+      addr: 2148520748, // 0x800FD32C
+      type: "u8",
+      name: "p3_char",
+      desc: "00=Mario" },
+{
       addr: 2148520752, // 0x800FD330
       type: "u16",
       name: "p3_coins",
@@ -1863,6 +1995,11 @@ export default [{
       type: "u16",
       name: "p3_turn_statu",
       desc: "Player 3 turn status" },
+{
+      addr: 2148520800, // 0x800FD360
+      type: "u8",
+      name: "p4_char",
+      desc: "00=Mario" },
 {
       addr: 2148520804, // 0x800FD364
       type: "u16",

@@ -23,11 +23,21 @@ _mainFSOffsets[Game.MP1_JPN] = [
   { upper: 0x156D6, lower: 0x156DA },
   { upper: 0x3BF32, lower: 0x3BF3A }
 ];
+_mainFSOffsets[Game.MP1_PAL] = [ // Default 0x003373C0
+  { upper: 0x160F6, lower: 0x160FA },
+  { upper: 0x3D83A, lower: 0x3D83E },
+];
 _mainFSOffsets[Game.MP2_USA] = [ // Default 0x0041DD30
   { upper: 0x416E6, lower: 0x416EE },
 ];
+_mainFSOffsets[Game.MP2_JPN] = [ // Default 0x00417540
+  { upper: 0x40D8A, lower: 0x40D92 },
+];
 _mainFSOffsets[Game.MP3_USA] = [
   { upper: 0x3619E, lower: 0x361A6 },
+];
+_mainFSOffsets[Game.MP3_JPN] = [ // Default 0x005517F0
+  { upper: 0x3618A, lower: 0x36192 },
 ];
 
 let _mainfsCache: IMainFsReadInfo[][] | null;
@@ -39,7 +49,7 @@ export interface IMainFsReadInfo {
   compressed?: ArrayBuffer;
 }
 
-function _getFileHeaderSize(compressionType: number) {
+export function _getFileHeaderSize(compressionType: number) {
   switch (compressionType) {
     case 0:
     case 1:
@@ -327,5 +337,14 @@ export class mainfs {
       }
     }
     return 0;
+  }
+
+  public static getFileHeaderSize(dir: number, file: number): number {
+    if (_mainfsCache && _mainfsCache[dir][file]) {
+      if (typeof _mainfsCache[dir][file].compressionType === "number") {
+        return _getFileHeaderSize(_mainfsCache[dir][file].compressionType);
+      }
+    }
+    return 8;
   }
 }

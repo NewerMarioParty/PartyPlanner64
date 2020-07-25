@@ -13,7 +13,7 @@ interface IOffsetInfo {
 
 type ILocale = "jp" | "en" | "de" | "es" | "it" | "fr";
 
-let _stringOffsets: { [game in Game]?: { [locale in ILocale]: IOffsetInfo[] } } = {};
+let _stringOffsets: { [game in Game]?: { [locale in ILocale]?: IOffsetInfo[] } } = {};
 _stringOffsets[Game.MP3_USA] = {
   "jp": [
     { upper: 0x0000F142, lower: 0x0000F14A }, // 0x1209850, len 0x13250
@@ -35,6 +35,28 @@ _stringOffsets[Game.MP3_USA] = {
     { upper: 0x0005B41E, lower: 0x0005B426 }, // 0x124D440
   ],
 };
+_stringOffsets[Game.MP3_JPN] = {
+  "jp": [
+    { upper: 0x0000F142, lower: 0x0000F14A }, // 0x1206E00
+    { upper: 0x0005B262, lower: 0x0005B26A },
+  ],
+  // "en": [
+  //   { upper: , lower:  }, // 0x121A050
+  // ],
+  // "de": [
+  //   { upper: , lower:  }, // 0x122FCE0
+  // ],
+  // "es": [
+  //   { upper: , lower:  }, // 0x1247B60
+  // ],
+  // "it": [
+  //   { upper: , lower:  }, // 0x125C6B0
+  // ],
+  // "fr": [
+  //   { upper: , lower:  }, // 0x1270D10
+  // ],
+};
+
 
 var _strFsInstances: { [locale: string]: StringTableSet } | null;
 
@@ -148,7 +170,11 @@ class StringTableSet {
 export const strings3 = {
   getROMOffset(locale: ILocale = "en") {
     let romView = romhandler.getDataView();
-    let romOffset = strings3.getPatchOffsets(locale)[0];
+    const localeOffsets = strings3.getPatchOffsets(locale);
+    if (!localeOffsets) {
+      return null;
+    }
+    let romOffset = localeOffsets[0];
     if (!romOffset)
       return null;
     let upper = romView.getUint16(romOffset.upper) << 16;
@@ -166,7 +192,7 @@ export const strings3 = {
     let locales = strings3.getLocales(romhandler.getROMGame()!);
     for (let l = 0; l < locales.length; l++) {
       let locale = locales[l];
-      let patchOffsets = strings3.getPatchOffsets(locale);
+      let patchOffsets = strings3.getPatchOffsets(locale)!;
       let upper = (curOffset & 0xFFFF0000) >>> 16;
       let lower = curOffset & 0x0000FFFF;
       if (lower & 0x8000)

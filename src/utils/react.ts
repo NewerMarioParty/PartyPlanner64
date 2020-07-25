@@ -1,3 +1,5 @@
+import { useState, useCallback } from "react";
+
 const ENTER_KEYCODE = 13;
 const SPACE_KEYCODE = 32;
 
@@ -30,4 +32,10 @@ export function makeKeyClick(fn: IKeyEventHandler, opts?: IKeyClickOpts) {
 export function killEvent(event: any) {
   event.stopPropagation();
   event.preventDefault();
+}
+
+/** Force update hook implementation. */
+export function useForceUpdate(): VoidFunction {
+  const [, setVal] = useState(0);
+  return useCallback(() => setVal(val => val + 1), []);
 }

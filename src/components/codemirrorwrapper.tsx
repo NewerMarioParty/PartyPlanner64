@@ -3,14 +3,18 @@ import * as CodeMirror from "codemirror";
 import { normalizeLineEndings } from "../utils/string";
 import "../utils/lib/mp-mips-autocomplete";
 import "../utils/lib/mp-mips-codemirror";
+import "codemirror/mode/clike/clike";
+
+type CodeMirrorMode = "mips-pp64" | "c";
 
 export interface ICodeMirrorWrapperProps {
   className?: string;
   value?: string;
   defaultValue?: string;
-  preserveScrollPosition?: boolean;
   options?: any;
-  onChange: Function;
+  onChange?: Function;
+  mode?: CodeMirrorMode;
+  readOnly?: boolean;
 }
 
 /**
@@ -22,9 +26,14 @@ export class CodeMirrorWrapper extends React.Component<ICodeMirrorWrapperProps> 
   private codemirror: CodeMirror.Editor | null = null;
 
   render() {
+    let className = this.props.className;
+    if (this.props.readOnly) {
+      className += " CodeMirror-readonly";
+    }
+
     return (
       <div ref={el => {this.el = el;}}
-        className={this.props.className}></div>
+        className={className}></div>
     );
   }
 
@@ -33,8 +42,12 @@ export class CodeMirrorWrapper extends React.Component<ICodeMirrorWrapperProps> 
     this.codemirror = (CodeMirror as any)(function(el: HTMLElement) {
       closureEl.appendChild(el);
     }, {
+      mode: getCodeMirrorMode(this.props.mode),
+      indentUnit: getCodeMirrorIndent(this.props.mode),
       value: this.props.value || this.props.defaultValue || "",
       extraKeys: {"Ctrl-Space": "autocomplete"},
+      readOnly: this.props.readOnly || false,
+      viewportMargin: 3000,
     }) as CodeMirror.Editor;
     this.codemirror.on("change", this.onInternalValueChanged);
   }
@@ -43,25 +56,12 @@ export class CodeMirrorWrapper extends React.Component<ICodeMirrorWrapperProps> 
     this.codemirror = null;
   }
 
-  componentWillReceiveProps(nextProps: ICodeMirrorWrapperProps) {
-    if (this.codemirror && nextProps.value !== undefined
-      && nextProps.value !== this.props.value
+  componentDidUpdate(prevProps: ICodeMirrorWrapperProps) {
+    if (this.codemirror && this.props.value !== undefined
+      && this.props.value !== prevProps.value
       && normalizeLineEndings(this.codemirror.getValue())
-          !== normalizeLineEndings(nextProps.value)) {
-      if (this.props.preserveScrollPosition) {
-        var prevScrollPosition = this.codemirror.getScrollInfo();
-        this.codemirror.setValue(nextProps.value);
-        this.codemirror.scrollTo(prevScrollPosition.left, prevScrollPosition.top);
-      } else {
-        this.codemirror.setValue(nextProps.value);
-      }
-    }
-    if (typeof nextProps.options === "object") {
-      for (let optionName in nextProps.options) {
-        if (nextProps.options.hasOwnProperty(optionName)) {
-          this.setOptionIfChanged(optionName, nextProps.options[optionName]);
-        }
-      }
+        !== normalizeLineEndings(this.props.value)) {
+        this.codemirror.setValue(this.props.value);
     }
   }
 
@@ -70,11 +70,26 @@ export class CodeMirrorWrapper extends React.Component<ICodeMirrorWrapperProps> 
       this.props.onChange(doc.getValue(), change);
     }
   }
+}
 
-  setOptionIfChanged = (optionName: string, newValue: any) => {
-    // const oldValue = this.codemirror!.getOption(optionName);
-    // if (!isEqual(oldValue, newValue)) {
-    //   this.codemirror!.setOption(optionName, newValue);
-    // }
+function getCodeMirrorMode(modeProp: CodeMirrorMode | undefined): any {
+  switch (modeProp) {
+    case "c":
+      return { name: "text/x-csrc" };
+
+    case "mips-pp64":
+    default:
+      return "mips-pp64";
+  }
+}
+
+function getCodeMirrorIndent(modeProp: CodeMirrorMode | undefined): number {
+  switch (modeProp) {
+    case "c":
+      return 4;
+
+    case "mips-pp64":
+    default:
+      return 2;
   }
 }

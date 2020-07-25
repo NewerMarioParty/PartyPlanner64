@@ -14,7 +14,8 @@ interface ITakeScreenyOpts {
   renderBadges?: boolean;
 }
 
-function takeScreeny(opts: ITakeScreenyOpts = {}) {
+/** Takes a screenshot of the current board. */
+export function takeScreeny(opts: ITakeScreenyOpts = {}) {
   const curBoard = getCurrentBoard();
   const screenCtx = createContext(curBoard.bg.width, curBoard.bg.height);
 
@@ -41,6 +42,7 @@ function takeScreeny(opts: ITakeScreenyOpts = {}) {
   setDebug(origDebug);
 
   return {
+    canvas: screenCtx.canvas,
     dataUri: screenCtx.canvas.toDataURL(),
     blobPromise: new Promise<Blob>((resolve) => {
       screenCtx.canvas.toBlob(resolve as any);

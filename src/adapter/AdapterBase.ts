@@ -3,17 +3,17 @@ import { getBoardInfos, getBoardInfoByIndex } from "./boardinfo";
 import { hvqfs } from "../fs/hvqfs";
 import { mainfs } from "../fs/mainfs";
 import { audio } from "../fs/audio";
-import { IBoard, addSpace, addEventByIndex, getConnections, addEventToSpace, getSpacesOfSubType, ISpace } from "../boards";
+import { IBoard, addEventByIndex, getConnections, addEventToSpace, getSpacesOfSubType, ISpace, IEventInstance, getDeadSpace, getDeadSpaceIndex } from "../boards";
 import { copyObject } from "../utils/obj";
 import { determineChains, padChains, create as createBoardDef, parse as parseBoardDef } from "./boarddef";
-import { Space, BoardType, EventActivationType, SpaceSubtype } from "../types";
+import { BoardType, EventActivationType, SpaceSubtype, getEventActivationTypeFromEditorType, EditorEventActivationType } from "../types";
 import { $$log, $$hex } from "../utils/debug";
 import { getSymbol } from "../symbols/symbols";
 import { scenes, ISceneInfo } from "../fs/scenes";
 import { findCalls, getRegSetAddress } from "../utils/MIPS";
 import { SpaceEventTable } from "./eventtable";
 import { SpaceEventList } from "./eventlist";
-import { createSpaceEvent, write as writeEvent, parse as parseEvent, getEvent } from "../events/events";
+import { createEventInstance, write as writeEvent, parse as parseEvent, getEvent } from "../events/events";
 import { toU32, stringToArrayBuffer, stringFromArrayBuffer } from "../utils/string";
 import { makeDivisibleBy, distance } from "../utils/number";
 import { parse as parseInst } from "mips-inst";
@@ -24,7 +24,7 @@ import { RGBA5551fromRGBA32 } from "../utils/img/RGBA5551";
 import { toPack, fromPack } from "../utils/img/ImgPack";
 import { arrayBufferToDataURL } from "../utils/arrays";
 import { get, $setting } from "../views/settings";
-import { makeGameSymbolLabels, prepSingleEventAsm } from "../events/prepAsm";
+import { makeGameSymbolLabels, prepSingleEventAsm, makeGenericSymbolsForAddresses } from "../events/prepAsm";
 import * as THREE from "three";
 import { IBoardInfo } from "./boardinfobase";
 import { ChainSplit1 } from "../events/builtin/MP1/U/ChainSplit1";
@@ -61,9 +61,14 @@ export abstract class AdapterBase {
   public abstract HEAP_FREE_ADDR: number;
   public abstract writeFullOverlay: boolean;
 
-  public loadBoards() {
+  public loadBoards(): IBoard[] {
     let boards = [];
-    let boardInfos = getBoardInfos(romhandler.getROMGame()!);
+    const game = romhandler.getROMGame()!;
+    let boardInfos = getBoardInfos(game);
+    if (!boardInfos) {
+      $$log(`Game ${game} has no board infos defined in PP64`);
+      return [];
+    }
 
     for (let i = 0; i < boardInfos.length; i++) {
       if (isDebug())
@@ -139,7 +144,7 @@ export abstract class AdapterBase {
   protected abstract onAfterOverwrite?(romView: DataView, boardCopy: IBoard, boardInfo: IBoardInfo): void;
   protected abstract onWriteEvents?(board: IBoard): void;
 
-  overwriteBoard(boardIndex: number, board: IBoard) {
+  async overwriteBoard(boardIndex: number, board: IBoard) {
     let boardCopy = copyObject(board);
     const boardInfo = getBoardInfoByIndex(romhandler.getROMGame()!, boardIndex);
 
@@ -147,8 +152,7 @@ export abstract class AdapterBase {
     padChains(boardCopy, chains);
 
     // If the user didn't place enough 3d characters, banish them to this dead space off screen.
-    let deadSpace = addSpace(boardCopy.bg.width + 150, boardCopy.bg.height + 100, Space.OTHER, undefined, boardCopy);
-    boardCopy._deadSpace = deadSpace;
+    getDeadSpace(boardCopy); // Trigger creation before boarddef is created.
 
     this.onChangeGameSpaceTypesFromBoardSpaceTypes(boardCopy);
     this._reversePerspective(boardCopy);
@@ -160,7 +164,7 @@ export abstract class AdapterBase {
 
     let eventSyms: string = "";
     if (this.writeFullOverlay) {
-      eventSyms = this._writeNewBoardOverlay(boardCopy, boardInfo, boardIndex);
+      eventSyms = await this._writeNewBoardOverlay(boardCopy, boardInfo, boardIndex);
     }
     else {
       // Wipe out the event ASM from those events.
@@ -186,7 +190,7 @@ export abstract class AdapterBase {
       boardInfo.onWriteEvents(boardCopy);
     if (this.onWriteEvents)
       this.onWriteEvents(boardCopy);
-    this._writeEvents(boardCopy, boardInfo, boardIndex, chains, eventSyms);
+    await this._writeEvents(boardCopy, boardInfo, boardIndex, chains, eventSyms);
 
     this._clearOtherBoardNames(boardIndex);
     this._stashBoardIntoRom(board, boardInfo); // Don't use the boardCopy here
@@ -200,11 +204,11 @@ export abstract class AdapterBase {
     if (this.onAfterOverwrite)
       this.onAfterOverwrite(romView, boardCopy, boardInfo);
 
-    return this.onOverwritePromises(board, boardInfo, boardIndex);
+    await this.onOverwritePromises(board, boardInfo, boardIndex);
   }
 
-  private _writeNewBoardOverlay(board: IBoard, boardInfo: IBoardInfo, boardIndex: number) {
-    const overlayAsm = this.onCreateBoardOverlay(board, boardInfo, boardIndex);
+  private async _writeNewBoardOverlay(board: IBoard, boardInfo: IBoardInfo, boardIndex: number): Promise<string> {
+    const overlayAsm = await this.onCreateBoardOverlay(board, boardInfo, boardIndex);
     const game = romhandler.getROMGame()!;
     const asm = `
         ${makeGameSymbolLabels(game, true).join("\n")}
@@ -234,7 +238,7 @@ export abstract class AdapterBase {
     return eventSyms;
   }
 
-  onCreateBoardOverlay(board: IBoard, boardInfo: IBoardInfo, boardIndex: number) {
+  async onCreateBoardOverlay(board: IBoard, boardInfo: IBoardInfo, boardIndex: number): Promise<string> {
     throw new Error("Adapter does not implement onCreateBoardOverlay");
   }
 
@@ -498,6 +502,9 @@ export abstract class AdapterBase {
 
     eventTable.forEach((eventTableEntry: any) => {
       let curSpaceIndex = eventTableEntry.spaceIndex;
+      if (curSpaceIndex < 0) {
+        $$log(`Space event on negative space ${curSpaceIndex}`);
+      }
 
       // Figure out the current info struct offset in the ROM.
       let curInfoAddr = eventTableEntry.address & 0x7FFFFFFF;
@@ -510,7 +517,7 @@ export abstract class AdapterBase {
       boardList.parse(buffer!, curInfoOffset);
       boardList.forEach(listEntry => {
         // Figure out the event ASM info in ROM.
-        let asmAddr = listEntry.address & 0x7FFFFFFF;
+        let asmAddr = (listEntry.address as number) & 0x7FFFFFFF;
         let asmOffset, codeView;
         if (asmAddr > (this.EVENT_RAM_LOC & 0x7FFFFFFF)) {
           asmOffset = this._addrToOffsetBase(asmAddr, this.EVENT_RAM_LOC);
@@ -572,7 +579,7 @@ export abstract class AdapterBase {
           if (links.length > 2) {
             throw new Error(`Encountered branch with ${links.length} directions, only 2 are supported currently`);
           }
-          event = createSpaceEvent(ChainSplit1, {
+          event = createEventInstance(ChainSplit1, {
             parameterValues: {
               left_space: links[0],
               right_space: links[1],
@@ -583,7 +590,7 @@ export abstract class AdapterBase {
         else {
           if (this.gameVersion !== 2)
             throw new Error("Unexpected code path for MP3");
-          event = createSpaceEvent(ChainSplit2, {
+          event = createEventInstance(ChainSplit2, {
             inlineArgs: links.concat(0xFFFF),
             parameterValues: {
               chains: endpoints,
@@ -591,15 +598,17 @@ export abstract class AdapterBase {
           });
         }
       }
-      else {
-        event = createSpaceEvent(ChainMerge, {
+      else if (links.length > 0) {
+        event = createEventInstance(ChainMerge, {
           parameterValues: {
             chain: _getChainWithSpace(links[0])!,
           },
         });
       }
 
-      addEventByIndex(board, lastSpace, event, true);
+      if (event) {
+        addEventByIndex(board, lastSpace, event, true);
+      }
     }
 
     function _getChainWithSpace(space: number) {
@@ -619,7 +628,7 @@ export abstract class AdapterBase {
       let events = space.events || [];
       let hasStarEvent = events.some(e => { return e.id === "STAR" }); // Pretty unlikely
       if (!hasStarEvent)
-        addEventToSpace(board, space, createSpaceEvent(StarEvent));
+        addEventToSpace(board, space, createEventInstance(StarEvent));
     }
   }
 
@@ -659,7 +668,7 @@ export abstract class AdapterBase {
       let nextChainSpaceIndex = chains[nextChainIndex].indexOf(nextSpaceIndex);
 
       // Redundant to write event twice, except we need it attached to both spaces.
-      const gateEvent = createSpaceEvent(Gate, {
+      const gateEvent = createEventInstance(Gate, {
         parameterValues: {
           gatePrevChain: [prevChainIndex, prevChainSpaceIndex],
           gateEntryIndex: entrySpaceIndex,
@@ -672,7 +681,7 @@ export abstract class AdapterBase {
       addEventToSpace(board, exitSpace, gateEvent);
 
       // Need an additional event to close the gate.
-      addEventToSpace(board, space, createSpaceEvent(GateClose, {
+      addEventToSpace(board, space, createEventInstance(GateClose, {
         parameterValues: {
           gateIndex,
         },
@@ -722,13 +731,13 @@ export abstract class AdapterBase {
   }
 
   // Write out all of the events ASM.
-  _writeEvents(board: IBoard, boardInfo: IBoardInfo, boardIndex: number, chains: number[][], eventSyms: string) {
+  async _writeEvents(board: IBoard, boardInfo: IBoardInfo, boardIndex: number, chains: number[][], eventSyms: string) {
     if (boardInfo.mainfsEventFile) {
       if (this.gameVersion !== 2) { // If events use non-string old write format
-        this._writeEventsNew2(board, boardInfo, boardIndex, chains, eventSyms);
+        await this._writeEventsNew2(board, boardInfo, boardIndex, chains, eventSyms);
       }
       else {
-        this._writeEventsNew(board, boardInfo, boardIndex, chains);
+        await this._writeEventsNew(board, boardInfo, boardIndex, chains);
       }
 
       if (!this.writeFullOverlay) {
@@ -737,7 +746,7 @@ export abstract class AdapterBase {
     }
   }
 
-  _writeEventsNew(board: IBoard, boardInfo: IBoardInfo, boardIndex: number, chains: number[][]) {
+  async _writeEventsNew(board: IBoard, boardInfo: IBoardInfo, boardIndex: number, chains: number[][]) {
     if (!boardInfo.mainfsEventFile)
       throw new Error(`No MainFS file specified to place board ASM for board ${boardIndex}.`);
 
@@ -761,11 +770,37 @@ export abstract class AdapterBase {
       eventTable.add(i, 0); // Just to keep track of what the table size is, address will be added later.
 
       let eventList = new SpaceEventList();
-      for (let e = 0; e < space.events.length; e++) {
-        let event = space.events[e];
-        eventList.add(event.activationType, event.executionType || (event as any).mystery, 0); // Also to track size
+      for (const event of space.events) {
+        const activationType = getEventActivationTypeFromEditorType(event.activationType);
+        eventList.add(activationType, event.executionType || (event as any).mystery, 0); // Also to track size
       }
       eventLists.push(eventList);
+    }
+
+    // Write any board events
+    const type5 = new SpaceEventList(-5);
+    const type4 = new SpaceEventList(-4);
+    const type3 = new SpaceEventList(-3);
+    const type2 = new SpaceEventList(-2);
+    const boardEventTypeInfos = [
+      { index: -5, list: type5, type: EditorEventActivationType.BEFORE_DICE_ROLL },
+      { index: -4, list: type4, type: EditorEventActivationType.BEFORE_PLAYER_TURN },
+      { index: -3, list: type3, type: EditorEventActivationType.AFTER_TURN },
+      { index: -2, list: type2, type: EditorEventActivationType.BEFORE_TURN },
+    ];
+    for (const { index, list, type } of boardEventTypeInfos) {
+      const events = _getEventsWithActivationType(board.boardevents || [], type);
+      const activationType = getEventActivationTypeFromEditorType(type); // Always SPECIAL
+      for (const event of events) {
+        list.add(activationType, event.executionType, 0);
+      }
+
+      this.onAddDefaultBoardEvents(type, list);
+
+      if (list.count() > 0) {
+        eventTable.add(index, 0);
+        eventLists.push(list);
+      }
     }
 
     // Figure out size of table and lists
@@ -805,8 +840,10 @@ export abstract class AdapterBase {
           gameVersion: this.gameVersion,
         };
 
-        let [writtenOffset, len] = writeEvent(eventBuffer, event, info, temp) as number[];
+        let [writtenOffset, len, mainOffset] = await writeEvent(eventBuffer, event, info, temp) as number[];
         eventTemp[event.id] = temp;
+
+        const absMainOffset = writtenOffset + (mainOffset || 0);
 
         // Apply address to event list.
         // If the writtenOffset is way out of bounds (like > EVENT_MEM_SIZE)
@@ -814,9 +851,9 @@ export abstract class AdapterBase {
         // events are like this for now) so we need to calc differently.
         let eventListAsmAddr;
         if (writtenOffset > this.EVENT_MEM_SIZE)
-          eventListAsmAddr = this._offsetToAddr(writtenOffset, boardInfo) | 0x80000000;
+          eventListAsmAddr = this._offsetToAddr(absMainOffset, boardInfo) | 0x80000000;
         else
-          eventListAsmAddr = this._offsetToAddrBase(writtenOffset, this.EVENT_RAM_LOC);
+          eventListAsmAddr = this._offsetToAddrBase(absMainOffset, this.EVENT_RAM_LOC);
         eventList.setAddress(e, eventListAsmAddr);
 
         currentOffset += len;
@@ -831,6 +868,51 @@ export abstract class AdapterBase {
       eventListCurrentOffset += eventList.write(eventBuffer, eventListCurrentOffset);
 
       eventListIndex++;
+    }
+
+    // Now write any board events
+    for (const { index, list, type } of boardEventTypeInfos) {
+      if (list.count() > 0) {
+        const events = _getEventsWithActivationType(board.boardevents || [], type);
+        for (let e = 0; e < events.length; e++) {
+          const event = events[e];
+          let temp = eventTemp[event.id] || {};
+          let info = {
+            boardIndex,
+            board,
+            curSpaceIndex: index,
+            curSpace: null,
+            chains,
+            offset: currentOffset,
+            addr: this._offsetToAddrBase(currentOffset, this.EVENT_RAM_LOC),
+            game: romhandler.getROMGame()!,
+            gameVersion: this.gameVersion,
+          };
+
+          let [writtenOffset, len] = await writeEvent(eventBuffer, event, info, temp) as number[];
+          eventTemp[event.id] = temp;
+
+          // Apply address to event list.
+          // If the writtenOffset is way out of bounds (like > EVENT_MEM_SIZE)
+          // it probably means it is directly referencing old code (some 2/3
+          // events are like this for now) so we need to calc differently.
+          let eventListAsmAddr;
+          if (writtenOffset > this.EVENT_MEM_SIZE)
+            eventListAsmAddr = this._offsetToAddr(writtenOffset, boardInfo) | 0x80000000;
+          else
+            eventListAsmAddr = this._offsetToAddrBase(writtenOffset, this.EVENT_RAM_LOC);
+
+          list.setAddress(e, eventListAsmAddr);
+
+          currentOffset += len;
+        }
+
+        // Fill in the address of the event listing itself back into the event table.
+        let eventListAddr = this._offsetToAddrBase(eventListCurrentOffset, this.EVENT_RAM_LOC);
+        eventTable.add(index, eventListAddr);
+
+        eventListCurrentOffset += list.write(eventBuffer, eventListCurrentOffset);
+      }
     }
 
     // Now we can write the event table, because all the addresses are set.
@@ -850,7 +932,7 @@ export abstract class AdapterBase {
     //saveAs(new Blob([eventBuffer]), "eventBuffer");
   }
 
-  _writeEventsNew2(board: IBoard, boardInfo: IBoardInfo, boardIndex: number, chains: number[][], eventSyms: string) {
+  async _writeEventsNew2(board: IBoard, boardInfo: IBoardInfo, boardIndex: number, chains: number[][], eventSyms: string) {
     if (!boardInfo.mainfsEventFile)
       throw new Error(`No MainFS file specified to place board ASM for board ${boardIndex}.`);
 
@@ -868,10 +950,11 @@ export abstract class AdapterBase {
 
       let eventList = new SpaceEventList(i);
       for (let e = 0; e < space.events.length; e++) {
-        let spaceEvent = space.events[e];
-        eventList.add(spaceEvent.activationType, spaceEvent.executionType || (spaceEvent as any).mystery, 0);
+        let eventInstance = space.events[e];
+        const activationType = getEventActivationTypeFromEditorType(eventInstance.activationType);
+        eventList.add(activationType, eventInstance.executionType || (eventInstance as any).mystery, 0);
 
-        let temp = eventTemp[spaceEvent.id] || {};
+        let temp = eventTemp[eventInstance.id] || {};
         let info = {
           boardIndex,
           board,
@@ -882,22 +965,77 @@ export abstract class AdapterBase {
           gameVersion: this.gameVersion,
         };
 
-        let eventAsm = writeEvent(new ArrayBuffer(0), spaceEvent, info, temp);
-        eventTemp[spaceEvent.id] = temp;
+        let eventAsm = await writeEvent(new ArrayBuffer(0), eventInstance, info, temp);
+        eventTemp[eventInstance.id] = temp;
 
         if (!(typeof eventAsm === "string")) {
-          throw new Error(`Event ${spaceEvent.id} did not return a string to assemble`);
+          throw new Error(`Event ${eventInstance.id} did not return a string to assemble`);
         }
 
-        const event = getEvent(spaceEvent.id, board);
+        const event = getEvent(eventInstance.id, board);
         eventAsms.push(
-          prepSingleEventAsm(eventAsm, event, spaceEvent, info, !staticsWritten[spaceEvent.id], e)
+          prepSingleEventAsm(eventAsm, event, eventInstance, info, !staticsWritten[eventInstance.id], e)
         );
 
-        staticsWritten[spaceEvent.id] = true;
+        staticsWritten[eventInstance.id] = true;
       }
       eventLists.push(eventList);
     }
+
+    // Write any board events
+    const type5 = new SpaceEventList(-5);
+    const type4 = new SpaceEventList(-4);
+    const type3 = new SpaceEventList(-3);
+    const type2 = new SpaceEventList(-2);
+    const boardEventTypeInfos = [
+      { index: -5, list: type5, type: EditorEventActivationType.BEFORE_DICE_ROLL },
+      { index: -4, list: type4, type: EditorEventActivationType.BEFORE_PLAYER_TURN },
+      { index: -3, list: type3, type: EditorEventActivationType.AFTER_TURN },
+      { index: -2, list: type2, type: EditorEventActivationType.BEFORE_TURN },
+    ];
+    for (const { index, list, type } of boardEventTypeInfos) {
+      const events = _getEventsWithActivationType(board.boardevents || [], type);
+      const activationType = getEventActivationTypeFromEditorType(type); // Always SPECIAL
+      for (let e = 0; e < events.length; e++) {
+        const eventInstance = events[e];
+        list.add(activationType, eventInstance.executionType, 0);
+
+        let temp = eventTemp[eventInstance.id] || {};
+        let info = {
+          boardIndex,
+          board,
+          curSpaceIndex: index,
+          curSpace: null,
+          chains,
+          game,
+          gameVersion: this.gameVersion,
+        };
+
+        let eventAsm = await writeEvent(new ArrayBuffer(0), eventInstance, info, temp);
+        eventTemp[eventInstance.id] = temp;
+
+        if (!(typeof eventAsm === "string")) {
+          throw new Error(`Event ${eventInstance.id} did not return a string to assemble`);
+        }
+
+        const event = getEvent(eventInstance.id, board);
+        eventAsms.push(
+          prepSingleEventAsm(eventAsm, event, eventInstance, info, !staticsWritten[eventInstance.id], e)
+        );
+
+        staticsWritten[eventInstance.id] = true;
+      }
+
+      this.onAddDefaultBoardEvents(type, list);
+
+      if (list.count() > 0) {
+        eventTable.add(index, 0);
+        eventLists.push(list);
+      }
+    }
+
+    const eventAsmCombinedString = eventAsms.join("\n");
+    const genericAddrSymbols = makeGenericSymbolsForAddresses(eventAsmCombinedString);
 
     const asm = `
       .org ${$$hex(this.EVENT_RAM_LOC)}
@@ -909,10 +1047,11 @@ export abstract class AdapterBase {
       ${eventSyms}
 
       ${makeGameSymbolLabels(game, false).join("\n")}
+      ${genericAddrSymbols.join("\n")}
 
       ${eventTable.getAssembly()}
       ${eventLists.map(eventList => eventList.getAssembly()).join("\n")}
-      ${eventAsms.join("\n")}
+      ${eventAsmCombinedString}
     `;
 
     $$log(asm);
@@ -1038,7 +1177,10 @@ export abstract class AdapterBase {
   _makeSymbolsForEventAssembly(syms: { [symbol: string]: number }, sceneInfo: ISceneInfo): string {
     let result: string = "";
     for (let symName in syms) {
-      if (symName.indexOf("__PP64_INTERNAL") === 0) {
+      if (symName.indexOf("__PP64_INTERNAL_VAL_") === 0) {
+        result += `.definelabel ${symName},${$$hex(syms[symName])}\n`;
+      }
+      else if (symName.indexOf("__PP64_INTERNAL") === 0) {
         result += `.definelabel ${symName},${$$hex(sceneInfo.ram_start + syms[symName])}\n`;
       }
     }
@@ -1047,6 +1189,13 @@ export abstract class AdapterBase {
 
   onWriteEventAsmHook(romView: DataView, boardInfo: IBoardInfo, boardIndex: number) {
     throw new Error("Adapter does not implement onWriteEventAsmHook");
+  }
+
+  /**
+   * Overwritten per game to add any default board events.
+   * All board events need to be in the same list, so we need to merge defaults with any custom ones.
+   */
+  protected onAddDefaultBoardEvents(editorActivationType: EditorEventActivationType, list: SpaceEventList): void {
   }
 
   _extractStarGuardians(board: IBoard, boardInfo: IBoardInfo) { // AKA Toads or Baby Bowsers lol
@@ -1214,12 +1363,12 @@ export abstract class AdapterBase {
       const booSpacesOffset = this._addrToOffsetBase(booRelativeAddr, sceneInfo.ram_start);
 
       for (let i = 0; i < booCount; i++) {
-        let booSpace = (booSpaces[i] === undefined ? board._deadSpace : booSpaces[i]);
+        let booSpace = (booSpaces[i] === undefined ? getDeadSpaceIndex(board) : booSpaces[i]);
         sceneView.setUint16(booSpacesOffset + (2 * i), booSpace!);
       }
     }
     else if (boardInfo.booSpaceInst) { // Just one Boo
-      let booSpace = (booSpaces[0] === undefined ? board._deadSpace : booSpaces[0]);
+      let booSpace = (booSpaces[0] === undefined ? getDeadSpaceIndex(board) : booSpaces[0]);
       sceneView.setUint16(boardInfo.booSpaceInst + 2, booSpace!);
     }
     else if (boardInfo.booCount) {
@@ -1227,7 +1376,7 @@ export abstract class AdapterBase {
       for (let b = 0; b < booArrOffset.length; b++) {
         let curBooSpaceIndexOffset = booArrOffset[b];
         for (let i = 0; i < boardInfo.booCount; i++) {
-          let booSpace = booSpaces[i] === undefined ? board._deadSpace : booSpaces[i];
+          let booSpace = booSpaces[i] === undefined ? getDeadSpaceIndex(board) : booSpaces[i];
           sceneView.setUint16(curBooSpaceIndexOffset, booSpace!);
           curBooSpaceIndexOffset += 2;
         }
@@ -1271,7 +1420,7 @@ export abstract class AdapterBase {
     for (let b = 0; b < bankArrOffset.length; b++) {
       let curBankSpaceIndexOffset = bankArrOffset[b];
       for (let i = 0; i < boardInfo.bankCount; i++) {
-        let bankSpace = bankSpaces[i] === undefined ? board._deadSpace : bankSpaces[i];
+        let bankSpace = bankSpaces[i] === undefined ? getDeadSpaceIndex(board) : bankSpaces[i];
         sceneView.setUint16(curBankSpaceIndexOffset, bankSpace!);
         curBankSpaceIndexOffset += 2;
       }
@@ -1281,7 +1430,7 @@ export abstract class AdapterBase {
     for (let b = 0; b < boardInfo.bankCoinArrOffset.length; b++) {
       let curBankCoinSpaceIndexOffset = boardInfo.bankCoinArrOffset[b];
       for (let i = 0; i < boardInfo.bankCount; i++) {
-        let bankCoinSpace = bankCoinSpaces[i] === undefined ? board._deadSpace : bankCoinSpaces[i];
+        let bankCoinSpace = bankCoinSpaces[i] === undefined ? getDeadSpaceIndex(board) : bankCoinSpaces[i];
         sceneView.setUint16(curBankCoinSpaceIndexOffset, bankCoinSpace!);
         curBankCoinSpaceIndexOffset += 2;
       }
@@ -1313,7 +1462,7 @@ export abstract class AdapterBase {
     for (let b = 0; b < boardInfo.itemShopArrOffset.length; b++) {
       let curItemShopSpaceIndexOffset = boardInfo.itemShopArrOffset[b];
       for (let i = 0; i < boardInfo.itemShopCount; i++) {
-        let ItemShopSpace = itemShopSpaces[i] === undefined ? board._deadSpace : itemShopSpaces[i];
+        let ItemShopSpace = itemShopSpaces[i] === undefined ? getDeadSpaceIndex(board) : itemShopSpaces[i];
         sceneView.setUint16(curItemShopSpaceIndexOffset, ItemShopSpace!);
         curItemShopSpaceIndexOffset += 2;
       }
@@ -1336,7 +1485,7 @@ export abstract class AdapterBase {
     for (let b = 0; b < gateArrOffset.length; b++) {
       let curGateSpaceIndexOffset = gateArrOffset[b];
       for (let i = 0; i < boardInfo.gateCount; i++) {
-        let gateSpace = gateSpaces[i] === undefined ? board._deadSpace : gateSpaces[i];
+        let gateSpace = gateSpaces[i] === undefined ? getDeadSpaceIndex(board) : gateSpaces[i];
         sceneView.setUint16(curGateSpaceIndexOffset, gateSpace!);
         curGateSpaceIndexOffset += 2;
       }
@@ -1550,3 +1699,7 @@ export abstract class AdapterBase {
     return {};
   }
 };
+
+function _getEventsWithActivationType(events: IEventInstance[], activationType: EditorEventActivationType): IEventInstance[] {
+  return events.filter(e => e.activationType === activationType);
+}

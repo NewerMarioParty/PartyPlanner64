@@ -1,8 +1,8 @@
 import { AdapterBase } from "./AdapterBase";
 import { IBoard, ISpace, addEventToSpace, getConnections, addEventByIndex } from "../boards";
-import { Space, BoardType, SpaceSubtype, EventActivationType, EventExecutionType } from "../types";
+import { Space, BoardType, SpaceSubtype, EventExecutionType, EditorEventActivationType, getEventActivationTypeFromEditorType } from "../types";
 import { $$log } from "../utils/debug";
-import { createSpaceEvent } from "../events/events";
+import { createEventInstance } from "../events/events";
 import { strings } from "../fs/strings";
 import { arrayToArrayBuffer } from "../utils/arrays";
 import { strings3 } from "../fs/strings3";
@@ -12,6 +12,7 @@ import { toPack } from "../utils/img/ImgPack";
 import { BMPfromRGBA } from "../utils/img/BMP";
 import { FORM } from "../models/FORM";
 import { scenes } from "../fs/scenes";
+import { SpaceEventList } from "./eventlist";
 import { IBoardInfo } from "./boardinfobase";
 import { ChainSplit3 } from "../events/builtin/MP3/U/ChainSplit3";
 import { ChainMerge3 } from "../events/builtin/MP3/U/ChainMergeEvent3";
@@ -33,8 +34,6 @@ export const MP3 = new class MP3Adapter extends AdapterBase {
   public MAINFS_READ_ADDR: number = 0x00009C10;
   public HEAP_FREE_ADDR: number = 0x00009E6C;
   public TABLE_HYDRATE_ADDR: number = 0x000EBA60;
-
-  public SCENE_TABLE_ROM: number = 0x00096EF4;
 
   public writeFullOverlay: boolean = true;
 
@@ -124,9 +123,19 @@ export const MP3 = new class MP3Adapter extends AdapterBase {
   onWriteEvents(board: IBoard) {
   }
 
+  protected onAddDefaultBoardEvents(editorActivationType: EditorEventActivationType, list: SpaceEventList): void {
+    if (editorActivationType === EditorEventActivationType.BEFORE_DICE_ROLL) {
+      const activationType = getEventActivationTypeFromEditorType(editorActivationType);
+
+      // MP3 has two "Before Dice Roll" default events.
+      list.add(activationType, EventExecutionType.DIRECT, "__PP64_INTERNAL_CURSE_POISON_DICEROLL_EVENT");
+      list.add(activationType, EventExecutionType.DIRECT, "__PP64_INTERNAL_REVERSAL_DICEROLL_EVENT");
+    }
+  }
+
   hydrateSpace(space: ISpace, board: IBoard) {
     if (space.type === Space.BANK) {
-      addEventToSpace(board, space, createSpaceEvent(BankEvent));
+      addEventToSpace(board, space, createEventInstance(BankEvent));
     }
   }
 
@@ -282,7 +291,7 @@ export const MP3 = new class MP3Adapter extends AdapterBase {
 
         let chainWithGate = _needsGateChainSplit(chainIndices);
         if (chainWithGate != null) {
-          event = createSpaceEvent(ChainSplit3, {
+          event = createEventInstance(ChainSplit3, {
             parameterValues: {
               spaceIndexArgs,
               chainArgs,
@@ -296,7 +305,7 @@ export const MP3 = new class MP3Adapter extends AdapterBase {
           });
         }
         else {
-          event = createSpaceEvent(ChainSplit3, {
+          event = createEventInstance(ChainSplit3, {
             parameterValues: {
               spaceIndexArgs,
               chainArgs,
@@ -305,8 +314,8 @@ export const MP3 = new class MP3Adapter extends AdapterBase {
         }
         addEventByIndex(board, lastSpace, event, true);
       }
-      else {
-        event = createSpaceEvent(ChainMerge3, {
+      else if (endLinks.length > 0) {
+        event = createEventInstance(ChainMerge3, {
           parameterValues: {
             chain: _getChainWithSpace(endLinks[0])!,
             prevSpace, // For MP3
@@ -370,7 +379,7 @@ export const MP3 = new class MP3Adapter extends AdapterBase {
           chainArgs.push(0x0001); // Second space index
           chainArgs.push(0x0000);
 
-          event = createSpaceEvent(ChainSplit3, {
+          event = createEventInstance(ChainSplit3, {
             parameterValues: {
               spaceIndexArgs,
               chainArgs,
@@ -381,7 +390,7 @@ export const MP3 = new class MP3Adapter extends AdapterBase {
           addEventByIndex(board, firstSpace, event, true);
         }
         else if (pointingSpaces.length === 1) { // Build a reverse merge
-          event = createSpaceEvent(ChainMerge3, {
+          event = createEventInstance(ChainMerge3, {
             parameterValues: {
               chain: chainIndices[0], // Go to pointing chain
               spaceIndex: pointingChains[0].length - 1, // Go to last space of pointing chain
@@ -400,16 +409,17 @@ export const MP3 = new class MP3Adapter extends AdapterBase {
         if (firstLinks.length > 1) {
           $$log("FIXME: branching isolated chain?");
         }
-        else {
+        else if (firstLinks.length > 0) {
           // This doesn't crash, but it creates a back forth loop at a dead end.
           // This probably will yield issues if the loop is over invisible spaces.
-          event = createSpaceEvent(ChainMerge, { // Not CHAINMERGE3
+          // Only do this if `firstLinks.length > 0`; if this is false, this is a single decorative space.
+          event = createEventInstance(ChainMerge, { // Not CHAINMERGE3
             parameterValues: {
               chain: i,
               spaceIndex: 1, // Because of chain padding, this should be safe
             },
           });
-          event.activationType = EventActivationType.BEGINORWALKOVER;
+          event.activationType = EditorEventActivationType.BEGINORWALKOVER;
           addEventByIndex(board, firstSpace, event, true);
         }
       }

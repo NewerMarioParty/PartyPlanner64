@@ -1,7 +1,7 @@
 import { IEvent, IEventParseInfo, IEventWriteInfo } from "../../../events";
-import { EventActivationType, EventExecutionType, Game, EventParameterType } from "../../../../types";
+import { EditorEventActivationType, EventExecutionType, Game, EventParameterType } from "../../../../types";
 import { hashEqual, copyRange } from "../../../../utils/arrays";
-import { addConnection, ISpaceEvent } from "../../../../boards";
+import { addConnection, IEventInstance } from "../../../../boards";
 import { getJALAddr, makeInst, REG } from "../../../../utils/MIPS";
 import { EventCache } from "../../../EventCache";
 import { addEventToLibrary } from "../../../EventLibrary";
@@ -11,7 +11,7 @@ import { addEventToLibrary } from "../../../EventLibrary";
 export const ChainSplit2: IEvent = {
   id: "CHAINSPLIT2",
   name: "",
-  activationType: EventActivationType.WALKOVER,
+  activationType: EditorEventActivationType.WALKOVER,
   executionType: EventExecutionType.PROCESS,
   parameters: [
     { name: "chains", type: EventParameterType.NumberArray, }
@@ -85,7 +85,7 @@ export const ChainSplit2: IEvent = {
 
     return false;
   },
-  write(dataView: DataView, event: ISpaceEvent, info: IEventWriteInfo, temp: { helper1addr: number, helper2addr: number }) {
+  write(dataView: DataView, event: IEventInstance, info: IEventWriteInfo, temp: { helper1addr: number, helper2addr: number }) {
     let cacheEntry = EventCache.get(ChainSplit2.id);
     if (!cacheEntry || !cacheEntry[info.game] || !cacheEntry[info.game].asm || !cacheEntry[info.game].helper1 || !cacheEntry[info.game].helper2)
       throw new Error(`Cannot write ${ChainSplit2.id}, missing cache entry values.`);
@@ -132,7 +132,7 @@ export const ChainSplit2: IEvent = {
     dataView.setUint16(0xEA, chains[0]); // Set the left chain index.
     dataView.setUint16(0xEE, chains[1]); // Set the right chain index.
 
-    return [info.offset!, lenWritten];
+    return [info.offset!, lenWritten, 0];
   }
 };
 addEventToLibrary(ChainSplit2);

@@ -1,6 +1,6 @@
 import { IEventParseInfo, IEventWriteInfo, IEvent } from "../../../events";
 import { hashEqual } from "../../../../utils/arrays";
-import { ISpaceEvent } from "../../../../boards";
+import { IEventInstance } from "../../../../boards";
 
 export const BooEvent1: Partial<IEvent> = {
   parse(dataView: DataView, info: IEventParseInfo) {
@@ -26,7 +26,7 @@ export const BooEvent1: Partial<IEvent> = {
 
     return false;
   },
-  write(dataView: DataView, event: ISpaceEvent, info: IEventWriteInfo, temp: any) {
+  write(dataView: DataView, event: IEventInstance, info: IEventWriteInfo, temp: any) {
     return `
       addiu SP, SP, -0x18
       sw    RA, 0x10(SP)

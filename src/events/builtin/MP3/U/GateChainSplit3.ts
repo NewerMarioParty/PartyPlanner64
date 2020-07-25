@@ -1,6 +1,6 @@
-import { ISpaceEvent, addConnection } from "../../../../boards";
+import { IEventInstance, addConnection } from "../../../../boards";
 import { IEventParseInfo, IEventWriteInfo, IEvent } from "../../../events";
-import { EventActivationType, Game, EventExecutionType } from "../../../../types";
+import { EditorEventActivationType, Game, EventExecutionType } from "../../../../types";
 import { hashEqual } from "../../../../utils/arrays";
 import { addEventToLibrary } from "../../../EventLibrary";
 
@@ -12,7 +12,7 @@ export const GateChainSplit: IEvent = {
   id: "GATECHAINSPLIT",
   name: "",
   fakeEvent: true,
-  activationType: EventActivationType.WALKOVER,
+  activationType: EditorEventActivationType.WALKOVER,
   executionType: EventExecutionType.PROCESS,
   supportedGames: [
     Game.MP3_USA,
@@ -47,7 +47,7 @@ export const GateChainSplit: IEvent = {
 
     return true;
   },
-  write(dataView: DataView, event: ISpaceEvent, info: IEventWriteInfo, temp: any) {
+  write(dataView: DataView, event: IEventInstance, info: IEventWriteInfo, temp: any) {
     // It's all in ChainSplit3.
     throw new Error(`${GateChainSplit.id} not implemented`);
   }

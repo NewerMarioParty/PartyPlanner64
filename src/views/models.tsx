@@ -8,6 +8,7 @@ import { Button, ToggleButton } from "../controls";
 import * as React from "react";
 import { MTNX } from "../models/MTNX";
 import * as THREE from "three";
+import { VertexNormalsHelper } from "three/examples/jsm/helpers/VertexNormalsHelper";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { MtnxToThreeJs } from "../models/MtnxToThreeJs";
 import { pad } from "../utils/string";
@@ -386,7 +387,7 @@ class ModelRenderer extends React.Component<IModelRendererProps> {
       scene.add(modelObj);
 
       if (this.props.showVertexNormals) {
-        const normalsHelper = new THREE.VertexNormalsHelper(modelObj, 8, 0x00FF00, 1);
+        const normalsHelper = new VertexNormalsHelper(modelObj, 8, 0x00FF00);
         scene.add(normalsHelper);
       }
 

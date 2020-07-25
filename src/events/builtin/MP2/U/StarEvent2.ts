@@ -1,6 +1,6 @@
 import { IEvent, IEventParseInfo, IEventWriteInfo } from "../../../events";
 import { hashEqual } from "../../../../utils/arrays";
-import { ISpaceEvent } from "../../../../boards";
+import { IEventInstance } from "../../../../boards";
 
 export const StarEvent2: Partial<IEvent> = {
   parse(dataView: DataView, info: IEventParseInfo) {
@@ -14,8 +14,8 @@ export const StarEvent2: Partial<IEvent> = {
 
     return false;
   },
-  write(dataView: DataView, event: ISpaceEvent, info: IEventWriteInfo, temp: any) {
+  write(dataView: DataView, event: IEventInstance, info: IEventWriteInfo, temp: any) {
     // Just point to the event because we left it alone.
-    return [0x29E0DC, 0];
+    return [0x29E0DC, 0, 0];
   },
 };

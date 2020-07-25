@@ -1,6 +1,6 @@
-import { ISpaceEvent } from "../../../../boards";
+import { IEventInstance } from "../../../../boards";
 import { IEventParseInfo, IEventWriteInfo, IEvent } from "../../../events";
-import { EventActivationType, EventExecutionType, Game, SpaceSubtype, EventParameterType } from "../../../../types";
+import { EditorEventActivationType, EventExecutionType, Game, SpaceSubtype, EventParameterType } from "../../../../types";
 
 export interface GateParameterNames {
   gateEntryIndex: number;
@@ -13,7 +13,7 @@ export interface GateParameterNames {
 export const Gate3: IEvent = {
   id: "GATE3",
   name: "",
-  activationType: EventActivationType.WALKOVER,
+  activationType: EditorEventActivationType.WALKOVER,
   executionType: EventExecutionType.PROCESS,
   parameters: [
     { name: "gateEntryIndex", type: EventParameterType.Number, },
@@ -45,7 +45,7 @@ export const Gate3: IEvent = {
 
     return false;
   },
-  write(dataView: DataView, event: ISpaceEvent, info: IEventWriteInfo, temp: any) {
+  write(dataView: DataView, event: IEventInstance, info: IEventWriteInfo, temp: any) {
     // const {
     //   gateEntryIndex,
     //   gateSpaceIndex,

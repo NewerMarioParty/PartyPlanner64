@@ -1,4 +1,4 @@
-import { BoardType, Space, SpaceSubtype, EventActivationType, EventExecutionType, GameVersion } from "./types";
+import { BoardType, Space, SpaceSubtype, EventExecutionType, GameVersion, EventCodeLanguage, EditorEventActivationType } from "./types";
 import { getSavedBoards } from "./utils/localstorage";
 import { copyObject } from "./utils/obj";
 import { ICustomEvent } from "./events/customevents";
@@ -39,15 +39,21 @@ export interface IBoard {
   difficulty: number;
   spaces: ISpace[];
   links: { [startingSpaceIndex: number]: (number | number[]) };
-  events: { [name: string]: string };
+  events: { [name: string]: IBoardEvent | string };
+  boardevents?: IEventInstance[];
   bg: IBoardBgDetails;
   otherbg: any;
   animbg?: string[];
   additionalbg?: string[];
-  additionalbgcode?: string;
+  additionalbgcode?: IBoardEvent | string;
   audioIndex: number;
   _rom?: boolean;
   _deadSpace?: number;
+}
+
+interface IBoardEvent {
+  language: EventCodeLanguage;
+  code: string;
 }
 
 interface IBoardImage {
@@ -74,15 +80,15 @@ export interface ISpace {
   rotation?: number;
   type: Space;
   subtype?: SpaceSubtype;
-  events?: ISpaceEvent[];
+  events?: IEventInstance[];
   star?: boolean;
   aiTree?: IDecisionTreeNode[];
 }
 
 /** The subset of an IEvent that is kept on a space in the board. */
-export interface ISpaceEvent {
+export interface IEventInstance {
   id: string;
-  activationType: EventActivationType;
+  activationType: EditorEventActivationType;
   executionType: EventExecutionType;
   parameterValues?: EventParameterValues;
   inlineArgs?: number[]; // deprecated
@@ -330,7 +336,7 @@ function _removeConnections(spaceIdx: number, board: IBoard) {
 }
 
 function _removeAssociations(spaceIdx: number, board: IBoard) {
-  forEachEventParameter(board, (parameter: IEventParameter, event: ISpaceEvent) => {
+  forEachEventParameter(board, (parameter: IEventParameter, event: IEventInstance) => {
     if (parameter.type === "Space") {
       if (event.parameterValues && event.parameterValues.hasOwnProperty(parameter.name)) {
         if (event.parameterValues[parameter.name] === spaceIdx) {
@@ -341,7 +347,7 @@ function _removeAssociations(spaceIdx: number, board: IBoard) {
   });
 }
 
-export function forEachEvent(board: IBoard, fn: (event: ISpaceEvent, space: ISpace, spaceIndex: number) => void) {
+export function forEachEvent(board: IBoard, fn: (event: IEventInstance, space: ISpace, spaceIndex: number) => void) {
   const spaces = board.spaces;
   if (spaces && spaces.length) {
     for (let s = 0; s < spaces.length; s++) {
@@ -357,8 +363,8 @@ export function forEachEvent(board: IBoard, fn: (event: ISpaceEvent, space: ISpa
   }
 }
 
-export function forEachEventParameter(board: IBoard, fn: (param: IEventParameter, event: ISpaceEvent, space: ISpace) => void) {
-  forEachEvent(board, (spaceEvent: ISpaceEvent, space: ISpace) => {
+export function forEachEventParameter(board: IBoard, fn: (param: IEventParameter, event: IEventInstance, space: ISpace) => void) {
+  forEachEvent(board, (spaceEvent: IEventInstance, space: ISpace) => {
     const event = getEvent(spaceEvent.id, board);
     if (event.parameters) {
       for (let p = 0; p < event.parameters.length; p++) {
@@ -386,7 +392,31 @@ function stripPrivateProps(obj: any = {}): any {
   return obj;
 }
 
-export function addEventToSpace(board: IBoard, space: ISpace, event: ISpaceEvent, toStart?: boolean) {
+/** Adds an event to be executed during specific moments. */
+export function addEventToBoard(board: IBoard, event: IEventInstance) {
+  if (!board.boardevents) {
+    board.boardevents = [];
+  }
+
+  board.boardevents.push(event);
+
+  if (event.custom) {
+    const customEvent = getEvent(event.id, board) as ICustomEvent;
+    includeEventInBoard(board, customEvent);
+  }
+}
+
+/** Removes an event from `boardevents`. */
+export function removeEventFromBoard(board: IBoard, event: IEventInstance) {
+  if (board.boardevents?.length) {
+    let eventIndex = board.boardevents.indexOf(event);
+    if (eventIndex !== -1) {
+      board.boardevents.splice(eventIndex, 1);
+    }
+  }
+}
+
+export function addEventToSpace(board: IBoard, space: ISpace, event: IEventInstance, toStart?: boolean) {
   space.events = space.events || [];
   if (event) {
     if (toStart)
@@ -396,12 +426,12 @@ export function addEventToSpace(board: IBoard, space: ISpace, event: ISpaceEvent
 
     if (event.custom) {
       const customEvent = getEvent(event.id, board) as ICustomEvent;
-      addEventToBoard(board, event.id, customEvent.asm);
+      includeEventInBoard(board, customEvent);
     }
   }
 }
 
-export function removeEventFromSpace(space: ISpace, event: ISpaceEvent) {
+export function removeEventFromSpace(space: ISpace, event: IEventInstance) {
   if (!space || !event || !space.events)
     return;
 
@@ -415,20 +445,29 @@ export function removeEventFromSpace(space: ISpace, event: ISpaceEvent) {
   // Otherwise, try to search for essentially the same thing?
 }
 
-export function getBoardEventAsm(board: IBoard, eventId: string): string | null {
+export function getBoardEvent(board: IBoard, eventId: string): IBoardEvent | null {
   if (board.events) {
-    return board.events[eventId];
+    const boardEvent = board.events[eventId];
+    if (typeof boardEvent === "string") {
+      return { language: EventCodeLanguage.MIPS, code: boardEvent };
+    }
+    return boardEvent || null;
   }
   return null;
 }
 
-export function addEventToBoard(board: IBoard, eventName: string, asm: string) {
-  if (!asm)
-    throw new Error(`Attempting to add event ${eventName} but it doesn't have assembly code`);
-  board.events[eventName] = asm;
+/** Includes an event in the collection of events kept within the board file. */
+export function includeEventInBoard(board: IBoard, event: ICustomEvent) {
+  if (!event.asm)
+    throw new Error(`Attempting to add event ${event.name} but it doesn't have code`);
+  board.events[event.name] = {
+    language: event.language!,
+    code: event.asm,
+  };
 }
 
-export function removeEventFromBoard(board: IBoard, eventId: string): void {
+/** Removes an event from the collection of events stored in the board file. */
+export function excludeEventFromBoard(board: IBoard, eventId: string): void {
   if (board.events) {
     delete board.events[eventId];
   }
@@ -438,6 +477,28 @@ export function removeEventFromBoard(board: IBoard, eventId: string): void {
       removeEventFromSpace(space, event);
     }
   });
+}
+
+export function getAdditionalBackgroundCode(board: IBoard): IBoardEvent | null {
+  if (board.additionalbgcode) {
+    let additionalBgCode = board.additionalbgcode;
+    if (typeof additionalBgCode === "string") {
+      return { language: EventCodeLanguage.MIPS, code: additionalBgCode };
+    }
+    return additionalBgCode || null;
+  }
+  return null;
+}
+
+export function setAdditionalBackgroundCode(board: IBoard, code: string, language: EventCodeLanguage): void {
+  if (code) {
+    board.additionalbgcode = {
+      code, language
+    };
+  }
+  else {
+    delete board.additionalbgcode;
+  }
 }
 
 function applyTheme(board: IBoard, name: "default" = "default") {
@@ -622,7 +683,7 @@ function _fixPotentiallyOldBoard(board: IBoard) {
 }
 
 function _migrateOldCustomEvents(board: IBoard) {
-  forEachEvent(board, (spaceEvent: ISpaceEvent) => {
+  forEachEvent(board, (spaceEvent: IEventInstance) => {
     // Unnecessary properties of space events.
     if ("parameters" in spaceEvent) {
       delete (spaceEvent as any).parameters;
@@ -811,7 +872,7 @@ export function removeSpace(index: number, board: IBoard = getCurrentBoard()) {
   }
 
   // Update space event parameter indices
-  forEachEventParameter(board, (parameter: IEventParameter, event: ISpaceEvent) => {
+  forEachEventParameter(board, (parameter: IEventParameter, event: IEventInstance) => {
     if (parameter.type === "Space") {
       if (event.parameterValues && event.parameterValues.hasOwnProperty(parameter.name)) {
         event.parameterValues[parameter.name] = _adjust(event.parameterValues[parameter.name]);
@@ -868,6 +929,21 @@ export function getSpacesWithEvent(eventName: string, board: IBoard = getCurrent
     }
   });
   return eventSpaces;
+}
+
+/** Gets the index of the "dead space." The space is created if it hasn't been already. */
+export function getDeadSpaceIndex(board: IBoard): number {
+  if (typeof board._deadSpace === "number") {
+    return board._deadSpace;
+  }
+  let deadSpaceIndex = addSpace(board.bg.width + 150, board.bg.height + 100, Space.OTHER, undefined, board);
+  board._deadSpace = deadSpaceIndex;
+  return deadSpaceIndex;
+}
+
+/** Gets the "dead space." The space is created if it hasn't been already. */
+export function getDeadSpace(board: IBoard): ISpace {
+  return board.spaces[getDeadSpaceIndex(board)];
 }
 
   // Returns array of space indices connected to from a space.

@@ -1,13 +1,13 @@
 import { IEventParseInfo, IEventWriteInfo, IEvent } from "../../../events";
-import { EventActivationType, EventExecutionType, Game } from "../../../../types";
+import { EditorEventActivationType, EventExecutionType, Game } from "../../../../types";
 import { hashEqual } from "../../../../utils/arrays";
-import { ISpaceEvent } from "../../../../boards";
+import { IEventInstance } from "../../../../boards";
 import { addEventToLibrary } from "../../../EventLibrary";
 
 export const Bowser: IEvent = {
   id: "BOWSER",
   name: "Visit Bowser",
-  activationType: EventActivationType.WALKOVER,
+  activationType: EditorEventActivationType.WALKOVER,
   executionType: EventExecutionType.DIRECT,
   supportedGames: [
     Game.MP1_USA
@@ -28,7 +28,7 @@ export const Bowser: IEvent = {
 
     return false;
   },
-  write(dataView: DataView, event: ISpaceEvent, info: IEventWriteInfo, temp: any) {
+  write(dataView: DataView, event: IEventInstance, info: IEventWriteInfo, temp: any) {
     // Any of these "work" but only the corresponding one has the right background.
     let bowserSceneNum = [0x48, 0x49, 0x4F, 0x53, 0x54, 0x5B, 0x5D][info.boardIndex];
 

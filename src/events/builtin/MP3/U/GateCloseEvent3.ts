@@ -1,12 +1,12 @@
-import { ISpaceEvent } from "../../../../boards";
+import { IEventInstance } from "../../../../boards";
 import { IEventParseInfo, IEventWriteInfo, IEvent } from "../../../events";
-import { EventActivationType, EventExecutionType, Game, EventParameterType } from "../../../../types";
+import { EditorEventActivationType, EventExecutionType, Game, EventParameterType } from "../../../../types";
 import { getFunctionLength } from "../../../../utils/MIPS";
 
 export const GateClose3: IEvent = {
   id: "GATECLOSE3",
   name: "",
-  activationType: EventActivationType.WALKOVER,
+  activationType: EditorEventActivationType.WALKOVER,
   executionType: EventExecutionType.DIRECT,
   parameters: [
     { name: "gateIndex", type: EventParameterType.Number },
@@ -31,7 +31,7 @@ export const GateClose3: IEvent = {
 
     return true;
   },
-  write(dataView: DataView, event: ISpaceEvent, info: IEventWriteInfo, temp: any) {
+  write(dataView: DataView, event: IEventInstance, info: IEventWriteInfo, temp: any) {
     // Most of the code still lives in the overlay.
     const gateIndex = event.parameterValues!.gateIndex as number;
     return `

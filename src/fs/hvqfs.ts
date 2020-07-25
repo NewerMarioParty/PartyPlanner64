@@ -122,6 +122,7 @@ _HVQFSOffsets[Game.MP1_JPN] = [
   { upper: 0x00313A1A, lower: 6 },
   { upper: 0x00316A02, lower: 6 },
 ];
+// MP1_PAL 0x10357D0
 _HVQFSOffsets[Game.MP2_USA] = [ // Default at 0x01164160
   { upper: 0x00054BD2, lower: 0x00054BDA },
   { upper: 0x00063A36, lower: 0x00063A3E },
@@ -148,6 +149,7 @@ _HVQFSOffsets[Game.MP2_USA] = [ // Default at 0x01164160
   { ovl: 0x70, upper: 0x1B5A, lower: 0x1B62 }, // ROM: 0x4107BA
   { ovl: 0x72, upper: 0x1E, lower: 0x26 }, // ROM: 0x4157AE
 ];
+// MP2 JPN 0x1156170
 _HVQFSOffsets[Game.MP3_USA] = [ // Default at 0x128CC60
   { ovl: 0x81, upper: 0x11E66, lower: 0x11E6E }, // ROM: 0xD07A6
   { ovl: 0x81, upper: 0x25716, lower: 0x2571E }, // ROM: 0xE4056
@@ -170,6 +172,7 @@ _HVQFSOffsets[Game.MP3_USA] = [ // Default at 0x128CC60
   { ovl: 0x7D, upper: 0x18EE, lower: 0x18F6 }, // ROM: 0x54F5FE
   { ovl: 0x7D, upper: 0x28B6, lower: 0x28BE }, // ROM: 0x5505C6
 ];
+// MP3 JPN 0x1287380
 
 interface IHVQMetadata {
   tileWidth: number;
@@ -247,8 +250,8 @@ export const hvqfs = {
   },
 
   setROMOffset(newOffset: number, buffer: ArrayBuffer) {
-    $$log(`HVQFS.setROMOffset(${$$hex(newOffset)}})`);
-    let patchOffsets = this.getPatchOffsets();
+    $$log(`HVQFS.setROMOffset(${$$hex(newOffset)})`);
+    let patchOffsets = this.getPatchOffsets()!;
     const [upper, lower] = getRegSetUpperAndLower(newOffset);
     for (let i = 0; i < patchOffsets.length; i++) {
       const patchOffset = patchOffsets[i];
@@ -269,7 +272,12 @@ export const hvqfs = {
   },
 
   getPatchOffsets() {
-    return _HVQFSOffsets[romhandler.getROMGame()!].map(offset => {
+    const gameOffsets = _HVQFSOffsets[romhandler.getROMGame()!];
+    if (!gameOffsets) {
+      return null;
+    }
+
+    return gameOffsets.map(offset => {
       if (offset.lower < 10 && !offset.ovl) { // Delete when JPN is converted
         return {
           upper: offset.upper,

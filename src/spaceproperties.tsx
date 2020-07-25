@@ -1,16 +1,12 @@
 import * as React from "react";
-import { BoardType, SpaceSubtype, Space, EventActivationType, EventParameterType, GameVersion } from "./types";
-import { ISpace, addEventToSpace, removeEventFromSpace, getCurrentBoard, ISpaceEvent, IBoard } from "./boards";
+import { BoardType, SpaceSubtype, Space, EditorEventActivationType, GameVersion } from "./types";
+import { ISpace, addEventToSpace, removeEventFromSpace, getCurrentBoard, IEventInstance } from "./boards";
+import { EventsList } from "./components/EventList";
 import { $setting, get } from "./views/settings";
-import { makeKeyClick } from "./utils/react";
-import { IEvent, getAvailableEvents, IEventParameter, createSpaceEvent, getEvent } from "./events/events";
-import { setEventParamDropHandler } from "./utils/drag";
-import { copyObject } from "./utils/obj";
-import { getImage } from "./images";
+import { makeKeyClick, useForceUpdate } from "./utils/react";
+import { IEvent, createEventInstance } from "./events/events";
 import { render, renderConnections, renderSpaces } from "./renderer";
-import { showMessage, promptUser, changeDecisionTree } from "./appControl";
-import { createCustomEvent } from "./events/customevents";
-import { getDistinctColor } from "./utils/colors";
+import { changeDecisionTree } from "./appControl";
 import { Button } from "./controls";
 import { $$log } from "./utils/debug";
 
@@ -58,10 +54,7 @@ import gameguyduelImage from "./img/toolbar/gameguyduel.png";
 import powerupImage from "./img/toolbar/powerup.png";
 import startblueImage from "./img/toolbar/startblue.png";
 import startredImage from "./img/toolbar/startred.png";
-
-import eventpassingImage from "./img/toolbar/eventpassing.png";
-import eventstandingImage from "./img/toolbar/eventstanding.png";
-import targetImage from "./img/events/target.png";
+import { SectionHeading } from "./propertiesshared";
 
 interface ISpacePropertiesProps {
   boardType: BoardType;
@@ -99,37 +92,6 @@ export class SpaceProperties extends React.Component<ISpacePropertiesProps> {
     this.forceUpdate();
   }
 
-  onEventAdded = (event: IEvent) => {
-    const space = this.props.selectedSpaces![0];
-    const spaceEvent = createSpaceEvent(event);
-    addEventToSpace(getCurrentBoard(), space, spaceEvent);
-    render();
-    this.forceUpdate();
-  }
-
-  onEventDeleted = (event: ISpaceEvent) => {
-    const space = this.props.selectedSpaces![0];
-    removeEventFromSpace(space, event);
-    render();
-    this.forceUpdate();
-  }
-
-  onEventActivationTypeToggle = (event: ISpaceEvent) => {
-    if (event.activationType === EventActivationType.WALKOVER)
-      event.activationType = EventActivationType.LANDON;
-    else
-      event.activationType = EventActivationType.WALKOVER;
-  }
-
-  onEventParameterSet = (event: ISpaceEvent, name: string, value: number) => {
-    if (!event.parameterValues) {
-      event.parameterValues = {};
-    }
-    event.parameterValues[name] = value;
-    renderConnections();
-    renderSpaces();
-  }
-
   render() {
     const spaces = this.props.selectedSpaces;
     if (!spaces || !spaces.length) {
@@ -146,8 +108,6 @@ export class SpaceProperties extends React.Component<ISpacePropertiesProps> {
     const isDuel = boardType === BoardType.DUEL;
     const spaceToggleTypes = _getSpaceTypeToggles(gameVersion, boardType);
     const spaceToggleSubTypes = _getSpaceSubTypeToggles(gameVersion, boardType);
-
-    let eventsHeading = <SectionHeading text="Events" />;
 
     let currentType: Space | undefined = curSpace.type;
     let currentSubtype = curSpace.subtype;
@@ -170,7 +130,7 @@ export class SpaceProperties extends React.Component<ISpacePropertiesProps> {
     return (
       <div className="properties">
         <div className="propertiesPadded">
-          {!multipleSelections ? <SpaceCoords space={curSpace} /> : null }
+          {!multipleSelections && <SpaceCoords space={curSpace} />}
           <SpaceTypeToggle toggleTypes={spaceToggleTypes}
             type={currentType}
             subtype={currentSubtype}
@@ -179,37 +139,17 @@ export class SpaceProperties extends React.Component<ISpacePropertiesProps> {
             type={currentType}
             subtype={currentSubtype}
             typeChanged={this.onTypeChanged} />
-          {!isDuel ? <SpaceStarCheckbox checked={hostsStarChecked}
+          {!isDuel && <SpaceStarCheckbox checked={hostsStarChecked}
             indeterminate={hostsStarIndeterminate}
-            onStarCheckChanged={this.onStarCheckChanged} /> : null }
+            onStarCheckChanged={this.onStarCheckChanged} />}
           <SpaceDecisionTreeButton space={curSpace} />
         </div>
-        {!multipleSelections ? eventsHeading : null }
-        {!multipleSelections ? (
-        <div className="propertiesPadded">
-          <SpaceEventsList events={curSpace.events}
-            board={getCurrentBoard()}
-            onEventAdded={this.onEventAdded} onEventDeleted={this.onEventDeleted}
-            onEventActivationTypeToggle={this.onEventActivationTypeToggle}
-            onEventParameterSet={this.onEventParameterSet} />
-        </div>
-        ) : null }
+        {!multipleSelections &&
+          <SpaceEventList selectedSpace={curSpace} />}
       </div>
     );
   }
 };
-
-interface ISectionHeadingProps {
-  text: string;
-}
-
-function SectionHeading(props: ISectionHeadingProps) {
-  return (
-    <span className="propertySectionTitle">
-      {props.text}
-    </span>
-  );
-}
 
 interface ISpaceCoordsProps {
   space: ISpace;
@@ -570,428 +510,55 @@ function SpaceDecisionTreeButton(props: ISpaceDecisionTreeButtonProps) {
   );
 }
 
-interface ISpaceEventsListProps {
-  events?: ISpaceEvent[];
-  board: IBoard;
-  onEventAdded(event: any): void;
-  onEventDeleted(event: ISpaceEvent): void;
-  onEventActivationTypeToggle(event: ISpaceEvent): void;
-  onEventParameterSet(event: ISpaceEvent, name: string, value: any): void;
+interface ISpaceEventListProps {
+  selectedSpace: ISpace;
 }
 
-class SpaceEventsList extends React.Component<ISpaceEventsListProps> {
-  render() {
-    let events = this.props.events || [];
-    let id = 0;
-    let entries = events.map((event: ISpaceEvent) => {
-      return (
-        <SpaceEventEntry event={event} key={`${event.id}-${id++}`}
-          board={this.props.board}
-          onEventDeleted={this.props.onEventDeleted}
-          onEventActivationTypeToggle={this.props.onEventActivationTypeToggle}
-          onEventParameterSet={this.props.onEventParameterSet} />
-      );
-    });
-    let eventadd;
-    // TODO: We could do something to restrict adding more events than realistic...
-    //if (!entries.length) {
-      eventadd = <SpaceEventAdd onEventAdded={this.props.onEventAdded} />;
-    //}
+const SpaceEventList: React.FC<ISpaceEventListProps> = props => {
+  const forceUpdate = useForceUpdate();
 
-    return (
-      <div className="eventsList">
-        {entries}
-        {eventadd}
+  function onEventAdded(event: IEvent) {
+    const space = props.selectedSpace;
+    const spaceEvent = createEventInstance(event);
+    addEventToSpace(getCurrentBoard(), space, spaceEvent);
+    render();
+    forceUpdate();
+  }
+
+  function onEventDeleted(event: IEventInstance) {
+    const space = props.selectedSpace;
+    removeEventFromSpace(space, event);
+    render();
+    forceUpdate();
+  }
+
+  function onEventActivationTypeToggle(event: IEventInstance) {
+    if (event.activationType === EditorEventActivationType.WALKOVER)
+      event.activationType = EditorEventActivationType.LANDON;
+    else
+      event.activationType = EditorEventActivationType.WALKOVER;
+  }
+
+  function onEventParameterSet(event: IEventInstance, name: string, value: number | boolean) {
+    if (!event.parameterValues) {
+      event.parameterValues = {};
+    }
+    event.parameterValues[name] = value;
+    renderConnections();
+    renderSpaces();
+  }
+
+  return (
+    <>
+      <SectionHeading text="Events" />
+      <div className="propertiesPadded">
+        <EventsList events={props.selectedSpace.events}
+          board={getCurrentBoard()}
+          onEventAdded={onEventAdded}
+          onEventDeleted={onEventDeleted}
+          onEventActivationTypeToggle={onEventActivationTypeToggle}
+          onEventParameterSet={onEventParameterSet} />
       </div>
-    );
-  }
+    </>
+  );
 };
-
-interface ISpaceEventEntryProps {
-  event: ISpaceEvent;
-  board: IBoard;
-  onEventDeleted(event: ISpaceEvent): void;
-  onEventActivationTypeToggle(event: ISpaceEvent): void;
-  onEventParameterSet(event: ISpaceEvent, name: string, value: number): void;
-}
-
-class SpaceEventEntry extends React.Component<ISpaceEventEntryProps> {
-  onEventDeleted = () => {
-    this.props.onEventDeleted(this.props.event);
-  }
-
-  onEventActivationTypeToggle = () => {
-    this.props.onEventActivationTypeToggle(this.props.event);
-    this.forceUpdate();
-  }
-
-  onEventParameterSet = (name: string, value: any) => {
-    this.props.onEventParameterSet(this.props.event, name, value);
-    this.forceUpdate();
-  }
-
-  render() {
-    let spaceEvent = this.props.event;
-    const event = getEvent(spaceEvent.id, this.props.board);
-    if (!event)
-      return null;
-    let name = event.name || spaceEvent.id;
-
-    let currentSpaceParameterIndex = 0;
-    let parameterButtons;
-    if (event.parameters) {
-      parameterButtons = event.parameters.map((parameter: IEventParameter) => {
-        const parameterValue = spaceEvent.parameterValues
-          && spaceEvent.parameterValues[parameter.name];
-        switch (parameter.type) {
-          case EventParameterType.Boolean:
-            return (
-              <SpaceEventBooleanParameterButton key={parameter.name}
-                parameter={parameter}
-                parameterValue={parameterValue}
-                onEventParameterSet={this.onEventParameterSet} />
-            );
-
-          case EventParameterType.Number:
-          case EventParameterType.PositiveNumber:
-            return (
-              <SpaceEventNumberParameterButton key={parameter.name}
-                parameter={parameter}
-                parameterValue={parameterValue}
-                positiveOnly={parameter.type === "+Number"}
-                onEventParameterSet={this.onEventParameterSet} />
-            );
-
-          case EventParameterType.Space:
-            return (
-              <SpaceEventSpaceParameterButton key={parameter.name}
-                parameter={parameter}
-                spaceParameterIndex={currentSpaceParameterIndex++}
-                parameterValue={parameterValue}
-                onEventParameterSet={this.onEventParameterSet} />
-            );
-
-          case EventParameterType.NumberArray:
-          default:
-            return null;
-        }
-      })
-    }
-
-    return (
-      <div className="eventEntry">
-        <div className="eventEntryHeader">
-          <span className="eventEntryName" title={name}>{name}</span>
-          <div role="button" className="eventEntryDelete" onClick={this.onEventDeleted}
-            title="Remove this event">✖</div>
-        </div>
-        <div className="eventEntryOptions">
-          <SpaceEventActivationTypeToggle activationType={spaceEvent.activationType}
-            onEventActivationTypeToggle={this.onEventActivationTypeToggle} />
-          {parameterButtons}
-        </div>
-      </div>
-    );
-  }
-};
-
-interface ISpaceEventActivationTypeToggleProps {
-  activationType: EventActivationType;
-  onEventActivationTypeToggle(): void;
-}
-
-class SpaceEventActivationTypeToggle extends React.Component<ISpaceEventActivationTypeToggleProps> {
-  onTypeToggle = () => {
-    this.props.onEventActivationTypeToggle();
-  }
-
-  render() {
-    let activationType = this.props.activationType;
-    const activationTypes = EventActivationType;
-
-    let activationTypeImages: any = {};
-    activationTypeImages[activationTypes.WALKOVER] = eventpassingImage;
-    activationTypeImages[activationTypes.LANDON] = eventstandingImage;
-    let activationTypeToggleImg = activationTypeImages[activationType];
-    if (!activationTypeToggleImg)
-      return null;
-
-    let activationTypeTitles: any = {};
-    activationTypeTitles[activationTypes.WALKOVER] = "Occurs when passing over the space";
-    activationTypeTitles[activationTypes.LANDON] = "Occurs when landing on the space";
-
-    let activationTypeText = "";
-    switch (activationType) {
-      case activationTypes.WALKOVER:
-        activationTypeText = "Passing event";
-        break;
-      case activationTypes.LANDON:
-        activationTypeText = "Land-on event";
-        break;
-    }
-
-    return (
-      <div className="eventEntryItem eventEntryActivationTypeItem" onClick={this.onTypeToggle}>
-        <img className="eventEntryActivationTypeToggle" alt="Activation Type"
-          src={activationTypeToggleImg} title={activationTypeTitles[activationType]} />
-        <span>{activationTypeText}</span>
-      </div>
-    );
-  }
-};
-
-interface ISpaceEventNumberParameterButtonProps {
-  parameter: IEventParameter;
-  parameterValue: any;
-  positiveOnly?: boolean;
-  onEventParameterSet(name: string, value: number): any;
-}
-
-class SpaceEventNumberParameterButton extends React.Component<ISpaceEventNumberParameterButtonProps> {
-  render() {
-    const parameterValue = this.props.parameterValue;
-    const valueHasBeenSet = parameterValue !== undefined && parameterValue !== null;
-    const tooltip = `(Number) ${this.props.parameter.name}: ${valueHasBeenSet ? parameterValue : "null"}`;
-    return (
-      <div className="eventEntryItem" title={tooltip}
-        onClick={this.onParameterClicked}>
-        <span className="eventEntryItemParameterName">{this.props.parameter.name}:</span>
-        &nbsp;
-        {valueHasBeenSet ?
-          <span>{this.props.parameterValue}</span>
-          : <span className="eventEntryItemParameterUnset">null</span>
-        }
-      </div>
-    );
-  }
-
-  onParameterClicked = async () => {
-    const name = this.props.parameter.name;
-    const positiveOnly = this.props.positiveOnly;
-    // Prompt the user for a value.
-    const userValue = await promptUser(
-      `Enter a${positiveOnly ? " positive " : " "}numeric value for the ${name} parameter:`
-    );
-    if (!userValue) {
-      return; // Enter nothing, ignore response.
-    }
-    const value = parseInt(userValue);
-    if (isNaN(value)) {
-      showMessage("The value entered could not be parsed into a number");
-      return;
-    }
-    if (this.props.positiveOnly && value <= 0) {
-      showMessage("The value entered must be a positive number");
-      return;
-    }
-    this.props.onEventParameterSet(name, value);
-  }
-};
-
-interface ISpaceEventBooleanParameterButtonProps {
-  parameter: IEventParameter;
-  parameterValue: any;
-  positiveOnly?: boolean;
-  onEventParameterSet(name: string, value: boolean): any;
-}
-
-class SpaceEventBooleanParameterButton extends React.Component<ISpaceEventBooleanParameterButtonProps> {
-  render() {
-    const parameterValue = this.props.parameterValue;
-    const valueHasBeenSet = parameterValue !== undefined && parameterValue !== null;
-    const tooltip = `(Boolean) ${this.props.parameter.name}: ${valueHasBeenSet ? parameterValue : "null"}`;
-    return (
-      <div className="eventEntryItem" title={tooltip}
-        onClick={this.onParameterClicked}>
-        <span className="eventEntryItemParameterName">{this.props.parameter.name}:</span>
-        &nbsp;
-        {valueHasBeenSet ?
-          <span>{this.props.parameterValue.toString()}</span>
-          : <span className="eventEntryItemParameterUnset">null</span>
-        }
-      </div>
-    );
-  }
-
-  onParameterClicked = () => {
-    const parameterValue = this.props.parameterValue;
-    this.props.onEventParameterSet(this.props.parameter.name, !parameterValue);
-  }
-};
-
-interface ISpaceEventSpaceParameterButtonProps {
-  parameter: any;
-  spaceParameterIndex: number;
-  parameterValue: any;
-  positiveOnly?: boolean;
-  onEventParameterSet(name: string, value: number): any;
-}
-
-class SpaceEventSpaceParameterButton extends React.Component<ISpaceEventSpaceParameterButtonProps> {
-  render() {
-    const parameterValue = this.props.parameterValue;
-    const valueHasBeenSet = parameterValue !== undefined && parameterValue !== null;
-    const tooltip = `(Space) ${this.props.parameter.name}: ${valueHasBeenSet ? "set" : "null"}`
-      + "\nDrag to a space to associate it";
-    const color = getDistinctColor(this.props.spaceParameterIndex);
-    const colorStyle = { backgroundColor: `rgb(${color.join(", ")})` };
-    return (
-      <div className="eventEntryItem eventEntryItemDraggable" title={tooltip}
-        draggable={true}
-        onDragStart={this.onDragStart}
-        onClick={this.onParameterClicked}>
-        <img alt="Target" src={targetImage} />
-        <span className="eventEntryItemParameterName">{this.props.parameter.name}:</span>
-        &nbsp;
-        {valueHasBeenSet ?
-          <span className="eventEntryItemParameterSpaceSetWrapper">set
-            <span style={colorStyle} className="eventEntryItemParameterColorSwatch"></span>
-          </span>
-          : <span className="eventEntryItemParameterUnset">null</span>
-        }
-      </div>
-    );
-  }
-
-  onDragStart = (event: React.DragEvent<any>) => {
-    setEventParamDropHandler(this.onSpaceDroppedOn);
-    event.dataTransfer.setDragImage(getImage("targetImg"), 3, 0);
-    event.dataTransfer.setData("text", JSON.stringify({
-      isEventParamDrop: true
-    }));
-  }
-
-  onSpaceDroppedOn = (spaceIndex: number) => {
-    setEventParamDropHandler(null);
-    if (spaceIndex >= 0) {
-      this.props.onEventParameterSet(this.props.parameter.name, spaceIndex);
-    }
-  }
-
-  onParameterClicked = () => {
-    showMessage("To associate a space with this event, click and drag from this list entry and release over the target space.");
-  }
-};
-
-interface ISpaceEventAddProps {
-  onEventAdded(event: IEvent): void;
-}
-
-interface ISpaceEventAddState {
-  selectedValue: number;
-  libraryEvents: IEvent[];
-  boardEvents: IEvent[];
-}
-
-class SpaceEventAdd extends React.Component<ISpaceEventAddProps, ISpaceEventAddState> {
-  constructor(props: ISpaceEventAddProps) {
-    super(props);
-
-    const eventSets = _getEventsForAddList();
-    this.state = {
-      selectedValue: -1,
-      libraryEvents: eventSets.libraryEvents.sort(_sortEvents),
-      boardEvents: eventSets.boardEvents.sort(_sortEvents),
-    }
-  }
-
-  private _refreshLists() {
-    const eventSets = _getEventsForAddList();
-    this.setState({
-      libraryEvents: eventSets.libraryEvents.sort(_sortEvents),
-      boardEvents: eventSets.boardEvents.sort(_sortEvents),
-    });
-  }
-
-  onSelection = (e: any) => {
-    let selectedOption = e.target.value;
-    if (selectedOption.toString() === "-1")
-      return;
-
-    const [collection, index] = selectedOption.split(",");
-
-    let event = copyObject((this as any).state[collection][index]);
-    if (!event)
-      throw new Error(`Could not add event ${selectedOption}`);
-
-    this.props.onEventAdded(event);
-
-    this._refreshLists();
-  }
-
-  render() {
-    if (!this.state.libraryEvents.length && !this.state.boardEvents.length)
-      return null;
-
-    const eventOptions = [
-      <option value="-1" key="-1" disabled>Add new event</option>
-    ];
-
-    let index = 0;
-
-    if (this.state.boardEvents.length) {
-      eventOptions.push(
-        <optgroup label="Board Events" key="boardEvents">
-          {
-            this.state.boardEvents.map(event => {
-              const identifier = "boardEvents," + index++;
-              return (
-                <option value={identifier} key={identifier}>{event.name}</option>
-              );
-            })
-          }
-        </optgroup>
-      );
-    }
-
-    index = 0;
-    eventOptions.push(
-      <optgroup label="Library Events" key="libraryEvents">
-        {
-          this.state.libraryEvents.map(event => {
-            const identifier = "libraryEvents," + index++;
-            return (
-              <option value={identifier} key={identifier}>{event.name}</option>
-            );
-          })
-        }
-      </optgroup>
-    )
-
-    return (
-      <div className="eventAddSelectEntry">
-        <select className="eventAddSelect" value={this.state.selectedValue} onChange={this.onSelection}>
-          {eventOptions}
-        </select>
-      </div>
-    );
-  }
-};
-
-function _getEventsForAddList() {
-  let libraryEvents = getAvailableEvents();
-
-  let boardEvents = [];
-  const board = getCurrentBoard();
-  for (let eventName in board.events) {
-    boardEvents.push(createCustomEvent(board.events[eventName]));
-  }
-
-  // Don't show library events that are also in the board events list.
-  // Force the user to conscientiously go to Events to "upgrade" the version
-  // of an event in use.
-  libraryEvents = libraryEvents.filter(event => {
-    return !(event.name in board.events);
-  });
-
-  return {
-    libraryEvents,
-    boardEvents,
-  };
-}
-
-function _sortEvents(a: IEvent, b: IEvent) {
-  if (a.name < b.name) return -1;
-  if (a.name > b.name) return 1;
-  return 0;
-}

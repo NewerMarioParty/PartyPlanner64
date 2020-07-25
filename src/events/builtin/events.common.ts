@@ -1,6 +1,6 @@
 import { IEventWriteInfo, IEventParseInfo, IEvent } from "../events";
-import { EventActivationType, EventExecutionType, Game, EventParameterType } from "../../types";
-import { ISpaceEvent } from "../../boards";
+import { EventExecutionType, Game, EventParameterType, EditorEventActivationType } from "../../types";
+import { IEventInstance } from "../../boards";
 
 import "./ChainMergeEvent";
 
@@ -21,7 +21,7 @@ import { addEventToLibrary } from "../EventLibrary";
 export const BooEvent: IEvent = {
   id: "BOO",
   name: "Visit Boo",
-  activationType: EventActivationType.WALKOVER,
+  activationType: EditorEventActivationType.WALKOVER,
   executionType: EventExecutionType.DIRECT,
   supportedGames: [
     Game.MP1_USA, Game.MP2_USA, Game.MP3_USA,
@@ -36,7 +36,7 @@ export const BooEvent: IEvent = {
         return BooEvent3.parse!(dataView, info);
     }
   },
-  write(dataView: DataView, event: ISpaceEvent, info: IEventWriteInfo, temp: any) {
+  write(dataView: DataView, event: IEventInstance, info: IEventWriteInfo, temp: any) {
     switch (info.gameVersion) {
       case 1:
         return BooEvent1.write!(dataView, event, info, temp);
@@ -52,7 +52,7 @@ addEventToLibrary(BooEvent);
 export const StarEvent: IEvent = {
   id: "STAR",
   name: "Buy star",
-  activationType: EventActivationType.WALKOVER,
+  activationType: EditorEventActivationType.WALKOVER,
   executionType: EventExecutionType.DIRECT,
   fakeEvent: true,
   supportedGames: [
@@ -69,7 +69,7 @@ export const StarEvent: IEvent = {
     }
     return false;
   },
-  write(dataView: DataView, event: ISpaceEvent, info: IEventWriteInfo, temp: any) {
+  write(dataView: DataView, event: IEventInstance, info: IEventWriteInfo, temp: any) {
     switch (info.gameVersion) {
       case 1:
         return StarEvent1.write!(dataView, event, info, temp);
@@ -86,7 +86,7 @@ addEventToLibrary(StarEvent);
 export const BankEvent: IEvent = {
   id: "BANK",
   name: "Visit Bank",
-  activationType: EventActivationType.WALKOVER,
+  activationType: EditorEventActivationType.WALKOVER,
   executionType: EventExecutionType.DIRECT,
   supportedGames: [
     Game.MP2_USA,
@@ -103,7 +103,7 @@ export const BankEvent: IEvent = {
     }
     return false;
   },
-  write(dataView: DataView, event: ISpaceEvent, info: IEventWriteInfo, temp: any) {
+  write(dataView: DataView, event: IEventInstance, info: IEventWriteInfo, temp: any) {
     switch (info.gameVersion) {
       case 1:
         return false;
@@ -120,7 +120,7 @@ addEventToLibrary(BankEvent);
 export const ItemShopEvent: IEvent = {
   id: "ITEMSHOP",
   name: "Visit Item Shop",
-  activationType: EventActivationType.WALKOVER,
+  activationType: EditorEventActivationType.WALKOVER,
   executionType: EventExecutionType.DIRECT,
   supportedGames: [
     Game.MP2_USA,
@@ -137,7 +137,7 @@ export const ItemShopEvent: IEvent = {
     }
     return false;
   },
-  write(dataView: DataView, event: ISpaceEvent, info: IEventWriteInfo, temp: any) {
+  write(dataView: DataView, event: IEventInstance, info: IEventWriteInfo, temp: any) {
     switch (info.gameVersion) {
       case 1:
         return false;
@@ -154,7 +154,7 @@ addEventToLibrary(ItemShopEvent);
 export const Gate: IEvent = {
   id: "GATE",
   name: "Skeleton Key Gate",
-  activationType: EventActivationType.WALKOVER,
+  activationType: EditorEventActivationType.WALKOVER,
   executionType: EventExecutionType.PROCESS,
   fakeEvent: true,
   supportedGames: [
@@ -172,7 +172,7 @@ export const Gate: IEvent = {
     }
     return false;
   },
-  write(dataView: DataView, event: ISpaceEvent, info: IEventWriteInfo, temp: any) {
+  write(dataView: DataView, event: IEventInstance, info: IEventWriteInfo, temp: any) {
     switch (info.gameVersion) {
       case 1:
         return false;
@@ -190,7 +190,7 @@ addEventToLibrary(Gate);
 export const GateClose: IEvent = {
   id: "GATECLOSE",
   name: "Skeleton Key Gate Close",
-  activationType: EventActivationType.WALKOVER,
+  activationType: EditorEventActivationType.WALKOVER,
   executionType: EventExecutionType.DIRECT,
   parameters: [
     { name: "gateIndex", type: EventParameterType.Number },
@@ -211,7 +211,7 @@ export const GateClose: IEvent = {
     }
     return false;
   },
-  write(dataView: DataView, event: ISpaceEvent, info: IEventWriteInfo, temp: any) {
+  write(dataView: DataView, event: IEventInstance, info: IEventWriteInfo, temp: any) {
     switch (info.gameVersion) {
       case 1:
         return false;

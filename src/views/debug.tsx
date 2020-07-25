@@ -19,9 +19,11 @@ import { $$hex } from "../utils/debug";
 import { strings3 } from "../fs/strings3";
 import { strings } from "../fs/strings";
 import { saveAs } from "file-saver";
+import { mainfs } from "../fs/mainfs";
+import { makeDivisibleBy } from "../utils/number";
 
 import "../css/debug.scss";
-import { mainfs } from "../fs/mainfs";
+import { romToRAM } from "../utils/offsets";
 
 interface IDebugViewState {
   sceneIndex: string;
@@ -35,6 +37,10 @@ interface IDebugViewState {
 
   romToRamNumber: string;
   romToRamResult: string;
+
+  mainfsToRomDir: string;
+  mainfsToRomIndex: string;
+  mainfsToRomResult: string;
 
   printStringDir: string;
   printStringIndex: string;
@@ -55,6 +61,10 @@ export const DebugView = class DebugView extends React.Component<{}, IDebugViewS
 
     romToRamNumber: "",
     romToRamResult: "",
+
+    mainfsToRomDir: "",
+    mainfsToRomIndex: "",
+    mainfsToRomResult: "",
 
     printStringDir: "",
     printStringIndex: "",
@@ -105,9 +115,22 @@ export const DebugView = class DebugView extends React.Component<{}, IDebugViewS
             value={this.state.romToRamNumber}
             onChange={e => this.setState({ romToRamNumber: e.target.value, romToRamResult: "" })}
           />
-          <Button onClick={this.onRomToRamClick}>ROM -> RAM</Button>
+          <Button onClick={this.onRomToRamClick}>ROM {"->"} RAM</Button>
           <br />
           <span className="selectable dbMonospace">{this.state.romToRamResult}</span>
+          <br /><br />
+
+          <input type="text" placeholder="Directory" className="dbInputShort"
+            value={this.state.mainfsToRomDir}
+            onChange={e => this.setState({ mainfsToRomDir: e.target.value, mainfsToRomResult: "" })}
+          />
+          <input type="text" placeholder="Index" className="dbInputShort"
+            value={this.state.mainfsToRomIndex}
+            onChange={e => this.setState({ mainfsToRomIndex: e.target.value, mainfsToRomResult: "" })}
+          />
+          <Button onClick={this.onMainFSToRomClick}>MainFS {"->"} ROM</Button>
+          <br />
+          <span className="selectable dbMonospace">{this.state.mainfsToRomResult}</span>
           <br /><br />
 
           <input type="text" placeholder="Scene number" className="dbInputShort"
@@ -219,7 +242,7 @@ export const DebugView = class DebugView extends React.Component<{}, IDebugViewS
 
       if (!result) {
         if (num >= 0x1000) {
-          result = `RAM: ${$$hex(((num - 0xC00) | 0x80000000) >>> 0)}`
+          result = `RAM: ${$$hex(romToRAM(num))}`
         }
       }
     }
@@ -229,6 +252,46 @@ export const DebugView = class DebugView extends React.Component<{}, IDebugViewS
     else {
       this.setState({ romToRamResult: "Unknown" });
     }
+  }
+
+  onMainFSToRomClick = () => {
+    let result = "";
+    const dir = parseInt(this.state.mainfsToRomDir, 10);
+    const file = parseInt(this.state.mainfsToRomIndex, 10);
+    if (!isNaN(dir) && !isNaN(file)) {
+      let currentOffset = mainfs.getROMOffset()!;
+
+      const dirCount = mainfs.getDirectoryCount();
+      // Account for directory table.
+      currentOffset += 4; // Count of directories
+      currentOffset += 4 * dirCount; // Directory offsets
+
+      for (let d = 0; d < dirCount; d++) {
+        const fileCount = mainfs.getFileCount(d);
+
+        // Account for file table.
+        currentOffset += 4; // Count of files
+        currentOffset += 4 * fileCount; // File offsets
+
+        for (let f = 0; f < fileCount; f++) {
+          currentOffset += mainfs.getFileHeaderSize(d, f); // Header
+
+          if (d === dir && f === file) {
+            result = `ROM: ${$$hex(currentOffset)}`;
+            break;
+          }
+
+          const compressedSize = mainfs.getCompressedSize(d, f);
+          currentOffset += compressedSize;
+          currentOffset = makeDivisibleBy(currentOffset, 2);
+        }
+
+        if (result)
+          break;
+      }
+    }
+
+    this.setState({ mainfsToRomResult: result || "Unknown" });
   }
 
   private findInMainFS(num: number): string {

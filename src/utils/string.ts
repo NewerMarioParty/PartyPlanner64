@@ -60,6 +60,13 @@ export function splice(value: string, start: number, delCount: number, newSubStr
   return value.slice(0, start) + newSubStr + value.slice(start + Math.abs(delCount));
 }
 
+/** String comparer function compatible with `sort`. */
+export function stringComparer(a: string, b: string): -1 | 0 | 1 {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+}
+
 export function normalizeLineEndings(str: string) {
   if (!str)
     return str;

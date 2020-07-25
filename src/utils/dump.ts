@@ -11,10 +11,10 @@ import { scenes } from "../fs/scenes";
 import { romhandler } from "../romhandler";
 import { FORM } from "../models/FORM";
 import { MTNX } from "../models/MTNX";
-import { getROMAdapter } from "../adapter/adapters";
 import { showMessage } from "../appControl";
 import * as JSZipMod from "jszip";
 import { saveAs } from "file-saver";
+import { isFontPack, fontPackToRGBA32, isKnownFontPack } from "./img/FontPack";
 
 const JSZip = JSZipMod.default;
 
@@ -45,16 +45,16 @@ export function create(callback: (blob: Blob) => any) {
 }
 
 export function load(buffer: ArrayBuffer) {
-  let zip = new JSZip();
-  zip.loadAsync(buffer).then((zip: any) => {
-    let mainfs = zip.folder("mainfs");
-    mainfs.forEach((relativePath: string, file: any) => {
-      let dirFileRegex = /(\d+)\/(\d+)/;
-      let match = relativePath.match(dirFileRegex);
+  const zip = new JSZip();
+  zip.loadAsync(buffer).then(zip => {
+    const mainfsfolder = zip.folder("mainfs");
+    mainfsfolder.forEach((relativePath, file) => {
+      const dirFileRegex = /(\d+)\/(\d+)/;
+      const match = relativePath.match(dirFileRegex);
       if (!match)
         return;
-      let d = parseInt(match[1]);
-      let f = parseInt(match[2]);
+      const d = parseInt(match[1]);
+      const f = parseInt(match[2]);
       if (isNaN(d) || isNaN(f))
         return;
       file.async("arraybuffer").then((content: ArrayBuffer) => {
@@ -72,6 +72,8 @@ export function load(buffer: ArrayBuffer) {
 export function images() {
   let zip = new JSZip();
 
+  const game = romhandler.getROMGame()!;
+
   let mainfsfolder = zip.folder("mainfs");
   let mainfsDirCount = mainfs.getDirectoryCount();
   for (let d = 0; d < mainfsDirCount; d++) {
@@ -81,26 +83,59 @@ export function images() {
       try {
         let fileBuffer = mainfs.get(d, f);
         if (FORM.isForm(fileBuffer)) {
-          let formUnpacked = FORM.unpack(fileBuffer)!;
-          if (formUnpacked.BMP1.length) {
-            formUnpacked.BMP1.forEach((bmpEntry: any, idx: number) => {
-              let dataUri = arrayBufferToDataURL(bmpEntry.parsed.src, bmpEntry.parsed.width, bmpEntry.parsed.height);
+          try {
+            let formUnpacked = FORM.unpack(fileBuffer)!;
+            if (formUnpacked.BMP1.length) {
+              formUnpacked.BMP1.forEach((bmpEntry, idx) => {
+                let dataUri = arrayBufferToDataURL(bmpEntry.parsed.src, bmpEntry.parsed.width, bmpEntry.parsed.height);
+                dirFolder.file(`${f}.${idx}.png`, dataUri.substr(dataUri.indexOf(',') + 1), { base64: true });
+              });
+            }
+          }
+          catch {}
+          continue;
+        }
+
+        if ((d === 0 && isFontPack(fileBuffer)) || isKnownFontPack(game, d, f)) {
+          let fontPack;
+          try {
+            fontPack = fontPackToRGBA32(fileBuffer);
+          }
+          catch {}
+
+          if (fontPack) {
+            const { charWidth, charHeight } = fontPack;
+            let idx = 0;
+            fontPack.chars.forEach(charImg => {
+              const dataUri = arrayBufferToDataURL(charImg, charWidth, charHeight);
               dirFolder.file(`${f}.${idx}.png`, dataUri.substr(dataUri.indexOf(',') + 1), { base64: true });
+              idx++;
             });
+            fontPack.images.forEach(img => {
+              const dataUri = arrayBufferToDataURL(img, charWidth, charHeight);
+              dirFolder.file(`${f}.${idx}.png`, dataUri.substr(dataUri.indexOf(',') + 1), { base64: true });
+              idx++;
+            });
+
+            const dataViews = fontPack.chars.concat(fontPack.images).map(buffer => new DataView(buffer));
+            const tilesBuf = fromTiles(dataViews, dataViews.length, 1, charWidth * 4, charHeight);
+            const tilesUrl = arrayBufferToDataURL(tilesBuf, charWidth * dataViews.length, charHeight);
+            dirFolder.file(`${f}.all.png`, tilesUrl.substr(tilesUrl.indexOf(',') + 1), { base64: true });
+
+            continue;
           }
         }
-        else {
-          // Maybe an ImgPack?
-          let imgs = _readImgsFromMainFS(d, f)!;
-          imgs.forEach((imgInfo, idx) => {
-            let dataUri = arrayBufferToDataURL(imgInfo.src!, imgInfo.width, imgInfo.height);
-            dirFolder.file(`${f}.${idx}.png`, dataUri.substr(dataUri.indexOf(',') + 1), { base64: true });
-          });
-          if (imgs.length > 1) {
-            let tilesBuf = fromTiles(_readPackedFromMainFS(d, f)!, imgs.length, 1, imgs[0].width * 4, imgs[0].height);
-            let tilesUrl = arrayBufferToDataURL(tilesBuf, imgs[0].width * imgs.length, imgs[0].height);
-            dirFolder.file(`${f}.all.png`, tilesUrl.substr(tilesUrl.indexOf(',') + 1), { base64: true });
-          }
+
+        // Maybe an ImgPack?
+        const imgs = _readImgsFromMainFS(d, f)!;
+        imgs.forEach((imgInfo, idx) => {
+          const dataUri = arrayBufferToDataURL(imgInfo.src!, imgInfo.width, imgInfo.height);
+          dirFolder.file(`${f}.${idx}.png`, dataUri.substr(dataUri.indexOf(',') + 1), { base64: true });
+        });
+        if (imgs.length > 1) {
+          const tilesBuf = fromTiles(_readPackedFromMainFS(d, f)!, imgs.length, 1, imgs[0].width * 4, imgs[0].height);
+          const tilesUrl = arrayBufferToDataURL(tilesBuf, imgs[0].width * imgs.length, imgs[0].height);
+          dirFolder.file(`${f}.all.png`, tilesUrl.substr(tilesUrl.indexOf(',') + 1), { base64: true });
         }
       }
       catch (e) {}
@@ -147,7 +182,7 @@ export function formImages() {
       try {
         let formUnpacked = FORM.unpack(fileBuffer)!;
         if (formUnpacked.BMP1.length) {
-          formUnpacked.BMP1.forEach((bmpEntry: any) => {
+          formUnpacked.BMP1.forEach(bmpEntry => {
             let dataUri = arrayBufferToDataURL(bmpEntry.parsed.src, bmpEntry.parsed.width, bmpEntry.parsed.height);
             console.log(`${d}/${f}:`);
             console.log(dataUri);
@@ -282,9 +317,8 @@ export function searchForPatchLocations(offset: number) {
 }
 
 export function printSceneTable() {
-  const adapter = getROMAdapter();
-  if (!(adapter && adapter.SCENE_TABLE_ROM)) {
-    console.log("ROM is not loaded, or scene table location is unknown");
+  if (!romhandler.romIsLoaded()) {
+    console.log("ROM is not loaded");
     return;
   }
 
@@ -311,9 +345,8 @@ export function printSceneTable() {
 
 /** Prints the overlay table in n64split format. */
 export function printSceneN64Split() {
-  const adapter = getROMAdapter();
-  if (!(adapter && adapter.SCENE_TABLE_ROM)) {
-    console.log("ROM is not loaded, or scene table location is unknown");
+  if (!romhandler.romIsLoaded()) {
+    console.log("ROM is not loaded");
     return;
   }
 

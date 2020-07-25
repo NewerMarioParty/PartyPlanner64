@@ -2,7 +2,7 @@ import { intersection } from "../arrays";
 import { getSymbols as getSymbolsForGame, ISymbol } from "../../symbols/symbols";
 import { registerHelper, Pos } from "codemirror";
 import { Game } from "../../types";
-import { getActiveEditorSupportedGames } from "../../views/createevent";
+import { getActiveEditorSupportedGames } from "../../views/createevent_shared";
 import "codemirror/addon/hint/show-hint";
 import "./mp-mips-codemirror";
 

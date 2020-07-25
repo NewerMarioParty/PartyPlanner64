@@ -1,5 +1,7 @@
-import { Action, BoardType, View } from "./types";
+import { Action, BoardType, View, EventCodeLanguage } from "./types";
 import * as React from "react";
+import * as ReactDOM from "react-dom";
+import { useState, useEffect } from "react";
 import { Screenshot } from "./screenshot";
 import { NewBoard } from "./newboard";
 import { setCurrentBoard, addBoard, clearBoardsFromROM, getCurrentBoard, loadBoardsFromROM, indexOfBoard, IBoard, boardIsROM, setBG, copyCurrentBoard, getBoards } from "./boards";
@@ -8,15 +10,14 @@ import { $$log } from "./utils/debug";
 import { getROMAdapter } from "./adapter/adapters";
 import { validateCurrentBoardForOverwrite, IValidationResult } from "./validation/validation";
 import { makeKeyClick } from "./utils/react";
-import * as ReactDOM from "react-dom";
 import { equal } from "./utils/arrays";
 import { get, $setting } from "./views/settings";
 import { romhandler } from "./romhandler";
-import { createCustomEvent } from "./events/customevents";
+import { createCustomEvent, validateCustomEvent } from "./events/customevents";
 import { render } from "./renderer";
 import { openFile } from "./utils/input";
 import { refreshEventsView } from "./views/eventsview";
-import { saveEvent, createEventPromptExit } from "./views/createevent";
+import { saveEvent, createEventPromptExit, NewEventDropdown } from "./views/createevent_shared";
 import { changeView, blockUI, boardsChanged, romLoadedChanged, changeCurrentEvent, showMessage, addNotification, removeNotification } from "./appControl";
 import { Notification, NotificationColor, NotificationButton } from "./components/notifications";
 import { addEventToLibrary } from "./events/EventLibrary";
@@ -48,6 +49,7 @@ import saveImage from "./img/header/save.png";
 //import moreImage from "./img/header/more.png";
 import boardwarningImage from "./img/header/boardwarning.png";
 import boarderrorImage from "./img/header/boarderror.png";
+import loadingSquaresImage from "./img/assets/loadingsquares.gif";
 
 import "./css/header.scss";
 
@@ -135,7 +137,9 @@ const actions_back: IHeaderActionItem[] = [
 ];
 
 const actions_events: IHeaderActionItem[] = actions_back.concat([
-  { "name": "Create Event", "icon": addImage, "type": Action.CREATEEVENT, "details": "Create your own event code" },
+  { "name": "Create Event", "icon": addImage, "type": Action.CREATEEVENT, "details": "Create your own event code",
+    "dropdownFn": newEventDropdown
+  },
   { "name": "Import Event", "icon": eventloadImage, "type": Action.EVENT_LOAD, "details": "Load event code from a file" },
 ]);
 
@@ -210,13 +214,10 @@ async function _handleAction(action: Action) {
       }
       break;
     case Action.EVENT_LOAD:
-      openFile(".s", eventFileSelected);
+      openFile(".c,.s", eventFileSelected);
       break;
     case Action.SAVE_EVENT:
       saveEvent();
-      break;
-    case Action.CREATEEVENT:
-      changeView(View.CREATEEVENT);
       break;
     case Action.STRINGS_EDITOR:
       changeView(View.STRINGS);
@@ -269,8 +270,8 @@ function romSelected(event: any) {
       blockUI(false);
       $$log("ROM loaded");
     }, reason => {
-      $$log(`Error loading ROM: ${reason}`);
-      showMessage("Error loading the ROM file.");
+      console.error(reason);
+      showMessage(`Error loading the ROM file.\n\n${reason}`);
     });
   };
   reader.readAsArrayBuffer(file);
@@ -315,11 +316,14 @@ function eventFileSelected(event: any) {
     return;
 
   for (let i = 0; i < files.length; i++) {
+    const file = files[i];
     let reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       try {
-        const asm = reader.result as string;
-        const customEvent = createCustomEvent(asm, true);
+        const language = getCodeLanguageFromFileName(file.name);
+        const code = reader.result as string;
+        const customEvent = createCustomEvent(language, code);
+        await validateCustomEvent(customEvent);
         addEventToLibrary(customEvent);
         refreshEventsView();
       } catch (e) {
@@ -327,8 +331,20 @@ function eventFileSelected(event: any) {
         return;
       }
     };
-    reader.readAsText(files[i]);
+    reader.readAsText(file);
   }
+}
+
+function getCodeLanguageFromFileName(name: string): EventCodeLanguage {
+  const lower = name.toLowerCase();
+  if (lower.endsWith(".s")) {
+    return EventCodeLanguage.MIPS;
+  }
+  else if (lower.endsWith(".c")) {
+    return EventCodeLanguage.C;
+  }
+
+  throw new Error(`Only .s or .c file extensions are recongized. (Saw ${name})`);
 }
 
 function getActions(view: View, board: IBoard, romLoaded: boolean) {
@@ -337,7 +353,7 @@ function getActions(view: View, board: IBoard, romLoaded: boolean) {
   if (view !== View.EDITOR) {
     if (view === View.EVENTS)
       actions = actions_events;
-    else if (view === View.CREATEEVENT)
+    else if (view === View.CREATEEVENT_ASM || view === View.CREATEEVENT_C)
       actions = actions_createevent;
     else if (view === View.ADDITIONAL_BGS)
       actions = actions_additionalbg;
@@ -413,18 +429,6 @@ export const Header = class Header extends React.Component<IHeaderProps, IHeader
     };
   }
 
-  componentWillReceiveProps = (nextProps: IHeaderProps) => {
-    const newActions = getActions(nextProps.view, nextProps.board, nextProps.romLoaded);
-
-    if (!equal(this.state.totalActions, newActions)) {
-      this.setState({
-        actions: newActions,
-        totalActions: newActions,
-        overflow: []
-      });
-    }
-  }
-
   refresh() {
     const actions = getActions(this.props.view, this.props.board, this.props.romLoaded);
     this.setState({
@@ -471,6 +475,16 @@ export const Header = class Header extends React.Component<IHeaderProps, IHeader
   }
 
   componentDidUpdate() {
+    const newActions = getActions(this.props.view, this.props.board, this.props.romLoaded);
+
+    if (!equal(this.state.totalActions, newActions)) {
+      this.setState({
+        actions: newActions,
+        totalActions: newActions,
+        overflow: []
+      });
+    }
+
     setTimeout(() => {
       window.requestAnimationFrame(this.handleOverflow.bind(this));
     }, 0);
@@ -631,24 +645,55 @@ const HeaderDropdown = class HeaderDropdown extends React.Component<IHeaderDropd
 };
 
 function overwriteDropdown(closeFn: any) {
-  const validationResults = validateCurrentBoardForOverwrite();
-  if (!validationResults)
-    return null;
-
-  return validationResults.map(function(result: IValidationResult, index: number) {
-    return (
-      <HeaderOverwriteBoardDropdownEntry
-        name={result.name}
-        errors={result.errors}
-        warnings={result.warnings}
-        unavailable={result.unavailable}
-        forcedDisabled={result.forcedDisabled}
-        closeCallback={closeFn}
-        key={index}
-        boardIndex={index - 1} />
-    );
-  });
+  const validationResultsPromise = validateCurrentBoardForOverwrite();
+  return (
+    <HeaderOverwriteBoardDropdown
+      resultsPromise={validationResultsPromise}
+      onClose={closeFn} />
+  );
 }
+
+interface IHeaderOverwriteBoardDropdownProps {
+  resultsPromise: Promise<IValidationResult[] | null>;
+  onClose: any;
+}
+
+const HeaderOverwriteBoardDropdown: React.FC<IHeaderOverwriteBoardDropdownProps> = (props) =>
+{
+  const { resultsPromise, onClose } = props;
+
+  const [validationResults, setValidationResults] = useState<IValidationResult[] | null>(null);
+
+  useEffect(() => {
+    resultsPromise.then(results => {
+      setValidationResults(results);
+    }, (e) => {
+      onClose();
+      console.error(e);
+      showMessage("An error occurred during board validation, please submit an issue.\n\n" + e.toString());
+    });
+  }, [resultsPromise, onClose]);
+
+  if (!validationResults)
+    return <PendingDropdown />;
+
+  // Fragment only for weird typing bug.
+  return <>
+    {validationResults.map(function(result: IValidationResult, index: number) {
+      return (
+        <HeaderOverwriteBoardDropdownEntry
+          name={result.name}
+          errors={result.errors}
+          warnings={result.warnings}
+          unavailable={result.unavailable}
+          forcedDisabled={result.forcedDisabled}
+          closeCallback={onClose}
+          key={index}
+          boardIndex={index - 1} />
+      );
+    })}
+  </>;
+};
 
 interface IHeaderOverwriteBoardDropdownEntryProps {
   name?: string;
@@ -661,7 +706,7 @@ interface IHeaderOverwriteBoardDropdownEntryProps {
 }
 
 const HeaderOverwriteBoardDropdownEntry = class HeaderOverwriteBoardDropdownEntry extends React.Component<IHeaderOverwriteBoardDropdownEntryProps> {
-  boardClicked = (event: any) => {
+  boardClicked = async (event: any) => {
     // The general validation entry cannot be clicked.
     if (!this.props.name) {
       return;
@@ -679,30 +724,35 @@ const HeaderOverwriteBoardDropdownEntry = class HeaderOverwriteBoardDropdownEntr
       let adapter = getROMAdapter();
       if (!adapter)
         return;
+
       blockUI(true);
+
       let currentBoard = getCurrentBoard();
-      let promise = adapter.overwriteBoard(this.props.boardIndex, currentBoard);
-      promise.then(() => {
-        $$log("Board overwritten");
-        clearBoardsFromROM();
-        loadBoardsFromROM();
+      try {
+        await adapter.overwriteBoard(this.props.boardIndex, currentBoard);
+      }
+      catch (e) {
+        console.error(e);
+        showMessage("Error overwriting the board.\n\n" + e.toString());
+        return;
+      }
 
-        let newBoardIndex = indexOfBoard(currentBoard);
-        if (newBoardIndex < 0)
-          newBoardIndex = 0;
+      $$log("Board overwritten");
+      clearBoardsFromROM();
+      loadBoardsFromROM();
 
-        setCurrentBoard(newBoardIndex);
+      let newBoardIndex = indexOfBoard(currentBoard);
+      if (newBoardIndex < 0)
+        newBoardIndex = 0;
 
-        recordEvent("board_write", {
-          "event_category": "action",
-          "event_label": currentBoard.name,
-        });
+      setCurrentBoard(newBoardIndex);
 
-        blockUI(false);
-      }, (reason: any) => {
-        $$log(`Error overriding board: ${reason}`);
-        showMessage("Error overwriting the board.");
+      recordEvent("board_write", {
+        "event_category": "action",
+        "event_label": currentBoard.name,
       });
+
+      blockUI(false);
     }
   }
 
@@ -847,3 +897,34 @@ function screenshotDropdown(closeFn: Function) {
     <Screenshot onAccept={onAccept} />
   );
 }
+
+function newEventDropdown(closeFn: Function) {
+  function onAccept(language: EventCodeLanguage) {
+    closeFn();
+
+    switch (language) {
+      case EventCodeLanguage.MIPS:
+        changeView(View.CREATEEVENT_ASM);
+        break;
+
+      case EventCodeLanguage.C:
+        changeView(View.CREATEEVENT_C);
+        break;
+
+      default:
+        throw new Error(`Unrecognized event code language ${language}`);
+    }
+  }
+  return (
+    <NewEventDropdown onAccept={onAccept} />
+  );
+}
+
+const PendingDropdown: React.FC<{}> = () =>
+{
+  return (
+    <div className="pendingDropdownBox">
+      <img className="pendingDropdownImage" src={loadingSquaresImage} alt="Loading"></img>
+    </div>
+  );
+};
